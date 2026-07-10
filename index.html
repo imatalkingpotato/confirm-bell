@@ -36,6 +36,10 @@
     background:#000; cursor:pointer; display:block;
     max-width:100%; height:auto;
   }
+  #fx {
+    position:absolute; inset:0; width:100%; height:100%;
+    pointer-events:none; z-index:8;
+  }
   .stage-wrap.shake { animation:shake .25s; }
   @keyframes shake {
     0%,100%{transform:translate(0,0)} 20%{transform:translate(-5px,3px)}
@@ -56,8 +60,6 @@
     content:''; position:absolute; bottom:-8px; left:24px;
     border:6px solid transparent; border-top-color:#222;
   }
-  .bubble.rare { background:#fff8dc; border-color:#c9990a; color:#5a4500; font-weight:bold; }
-  .bubble.rare:after { border-top-color:#c9990a; }
   @keyframes pop { 0%{transform:scale(.5); opacity:0} 100%{transform:scale(1); opacity:1} }
   .banner {
     position:absolute; top:38%; left:50%; transform:translate(-50%,-50%);
@@ -72,6 +74,15 @@
     20%{transform:translate(-50%,-50%) scale(1)}
     80%{opacity:1} 100%{opacity:0}
   }
+  .celebrate {
+    position:absolute; inset:0; z-index:9; border-radius:6px;
+    background:rgba(10,8,20,.74);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:12px; text-align:center; animation:pop .25s ease-out; padding:20px;
+  }
+  .c-title { font-size:30px; color:#ffd94a; text-shadow:3px 3px 0 #b3222d; letter-spacing:2px; }
+  .c-quote { font-size:20px; color:#fff; line-height:1.5; }
+  .c-sub { font-size:12px; color:#cfc6e8; }
   .hud { display:flex; gap:14px; margin-top:12px; font-size:13px; flex-wrap:wrap; justify-content:center; }
   .hud .box { background:#2c2440; border:2px solid #4a3f68; padding:8px 16px; border-radius:4px; text-align:center; min-width:100px; }
   .hud .num { font-size:22px; color:#ffd94a; display:block; margin-top:2px; }
@@ -97,12 +108,13 @@
 </head>
 <body>
   <h1>🔔 컨펌벨</h1>
-  <div class="sub">컨펌이 늦어질 땐, 벨을 울리세요. (사람은 안 때려요. 우린 프로니까.)</div>
+  <div class="sub">뿅망치는 장난감이에요. 아프지 않아요. 마음만 전달돼요.</div>
 
   <div class="tabs" id="tabs"></div>
 
   <div class="stage-wrap" id="stageWrap">
     <canvas id="stage" width="640" height="440"></canvas>
+    <canvas id="fx" width="640" height="440"></canvas>
   </div>
 
   <div class="hud">
@@ -112,7 +124,7 @@
     <div class="box">오늘 호출<span class="num" id="teamToday">0</span></div>
   </div>
 
-  <button id="btn">🔔 컨펌 플리즈!</button>
+  <button id="btn">🔨 컨펌 플리즈!</button>
 
   <div class="board">
     <h2>📊 오늘의 리더보드</h2>
@@ -126,15 +138,12 @@
     <div class="yearline" id="yearLine"></div>
   </div>
 
-  <div class="hint">스페이스바 · 클릭 · 탭 = 벨 울리기 · 숫자키 1~4 = 담당자 변경<br>콤보 500까지 멘트가 있습니다. 도전하세요.</div>
+  <div class="hint">스페이스바 · 클릭 · 탭 = 콩 · 숫자키 1~4 = 담당자 변경<br>콤보 1000까지 멘트가 있습니다. 그리고 아주 낮은 확률로… 좋은 일이 생깁니다.</div>
 
 <script>
 // ═══════════════════════════════════════════════════════════
-//  팀 공유(누적) 리더보드 설정 — 선택사항
-//  1) console.firebase.google.com 에서 무료 프로젝트 생성
-//  2) Realtime Database 만들기 (테스트 모드로 시작)
-//  3) 아래에 DB URL 붙여넣기 (끝에 /confirmbell 추가)
-//  예: 'https://my-project-default-rtdb.firebaseio.com/confirmbell'
+//  팀 공유(누적) 리더보드 설정
+//  Firebase Realtime Database URL (끝에 /confirmbell)
 //  비워두면("") 개인 기록 모드(이 브라우저에만 저장)로 동작.
 // ═══════════════════════════════════════════════════════════
 const SHARED_DB_URL = 'https://confirm-bell-default-rtdb.firebaseio.com/confirmbell';
@@ -142,7 +151,7 @@ const SHARED_DB_URL = 'https://confirm-bell-default-rtdb.firebaseio.com/confirmb
 // ================= 담당자 데이터 =================
 const PEOPLE = [
   { name:'이슬', hair:'#26180f', hairStyle:'long', top:'#7fb4d9' },
-  { name:'민희', hair:'#3b2313', hairStyle:'wave', top:'#e8a0b4' },
+  { name:'민희', hair:'#171310', hairStyle:'wave', top:'#e8a0b4' },
   { name:'우리', hair:'#171310', hairStyle:'bob',  top:'#a4d4a0' },
   { name:'지영', hair:'#171310', hairStyle:'tied', top:'#d9c47f' },
 ];
@@ -150,22 +159,24 @@ const REACTIONS = ['잠시만요~','아 네네 지금 볼게요','회의 중이�
 const RARE = ['덱으로 볼게요!','앗 미팅이 많아 지금 보겠습니다','4시에 볼게요~','오늘까지 컨펌해두겠습니다','지금 바로 확인할게요!'];
 const MILESTONES = {
   10:'어셋/카피/썸네일 컨펌 부탁드립니다 🙏',
-  20:'어셋/카피/썸네일 컨펌 리마인드 드립니다',
-  30:'덱에 핑 드렸습니다!',
-  40:'댓글 남겨드렸습니다!',
-  50:'오전에 슬랙 드렸습니다…',
-  70:'혹시 확인되셨을까요…?',
-  90:'리마인드의 리마인드 드립니다 🙇',
-  110:'오늘 업로드 건이라 한 번만 부탁드립니다',
-  140:'컨펌… 컨펌을 주세요…',
-  170:'현기증 난단 말이에요',
-  200:'어셋이 식어가고 있어요 🥶',
-  250:'혹시… 자리에 계실까요…?',
-  300:'저 이제 퇴근하고 싶어요',
-  350:'벨이 닳고 있습니다 🔔💦',
-  400:'이 정도면 텔레파시로 전달됐을 듯',
-  450:'벨: 저도 이제 지쳤어요',
-  500:'👑 전설의 컨펌 헌터 등극 👑'
+  20:'컨펌 리마인드 드립니다 (벌써 2회차)',
+  30:'덱에 핑 드렸습니다. 보셨죠? 보고 안 누르신 거죠?',
+  50:'읽씹은 아니시죠? 아니라고 해주세요',
+  70:'슬랙 1, 댓글 2, 덱 1. 지금 저만 세고 있나요?',
+  100:'괜찮아요. 기다리는 게 저희 일이니까요. 아마도요.',
+  150:'어셋이 오늘도 컨펌을 기다립니다. 어셋도 지쳤대요.',
+  200:'혹시 미팅이 하루 24시간이세요?',
+  250:'"확인해볼게요"의 "확인"은 어떤 의미셨을까요',
+  300:'괜찮습니다. 어차피 오늘도 야근이었어요.',
+  350:'말풍선 답장은 참 빠르시던데요. 인스타 스토리도요.',
+  400:'컨펌 안 해주셔도 돼요. 대신 업로드도 없는 거예요.',
+  450:'지금 보신다고요? 그 말 3시간 전에도 하셨어요.',
+  500:'반환점입니다. 컨펌은 아직도 없네요.',
+  600:'저희 팀 상태메시지 바꿨어요. "컨펌 대기 중"으로.',
+  700:'이쯤이면 컨펌이 아니라 기적을 기다리는 중입니다.',
+  800:'이 기록, 내년 위클리 첫 장에 넣겠습니다.',
+  900:'괜찮아요. 울지 않아요. 프로니까요.',
+  1000:'👑 천 번의 콩. 그래도 컨펌은 없었다. 👑'
 };
 
 // ================= 상태 & 저장 =================
@@ -184,7 +195,8 @@ let store = { daily:{}, monthly:{}, yearly:{}, myTotal:0, maxCombo:0 }; // 개�
 let combo = 0, maxCombo = 0, comboTimer = null;
 let shared = { daily:null, monthly:null, yearly:null }; // 팀 모드 서버 값
 let pending = [0,0,0,0]; // 서버 전송 대기분
-let anim = { hammer:0, bell:0, frown:0, sweat:0 };
+let anim = { hammer:0, bonk:0, frown:0, sweat:0 };
+let celebrating = false;
 
 try {
   const saved = JSON.parse(localStorage.getItem(LS_KEY));
@@ -213,7 +225,6 @@ const sharedOn = !!SHARED_DB_URL;
 let poll = ()=>{};
 if(sharedOn){
   document.getElementById('boardMode').textContent='팀 전체 실시간 합산 · 00시/월초 자동 리셋';
-  // 대기분 전송: 서버측 increment라 동시 접속자끼리도 안전하게 합산
   setInterval(()=>{
     pending.forEach((n,i)=>{
       if(n>0){
@@ -221,12 +232,11 @@ if(sharedOn){
         [`daily/${K.day}`,`monthly/${K.mon}`,`yearly/${K.year}`].forEach((p,pi)=>{
           fetch(`${SHARED_DB_URL}/${p}/${i}.json`,{
             method:'PUT', body:JSON.stringify({'.sv':{'increment':send}})
-          }).catch(()=>{ if(pi===0) pending[i]+=send; }); // 실패 시 되돌림
+          }).catch(()=>{ if(pi===0) pending[i]+=send; });
         });
       }
     });
   }, 2500);
-  // 일/월/연 버킷 폴링
   poll = ()=>{
     checkRollover();
     const get=p=>fetch(`${SHARED_DB_URL}/${p}.json`).then(r=>r.json()).catch(()=>null);
@@ -241,7 +251,7 @@ if(sharedOn){
 
 // ================= 캔버스 =================
 const cv = document.getElementById('stage'), ctx = cv.getContext('2d');
-const S = 4; // 논리 해상도 160x110
+const S = 5; // 논리 해상도 128x88 (줌인)
 function px(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(Math.round(x*S),Math.round(y*S),Math.round(w*S),Math.round(h*S)); }
 function shade(hex){
   const n=parseInt(hex.slice(1),16), r=(n>>16)*0.8|0, g=((n>>8)&255)*0.8|0, b=(n&255)*0.8|0;
@@ -253,28 +263,26 @@ function drawScene(){
   const p = PEOPLE[cur];
 
   // ----- 배경 -----
-  px(0,0,160,74,'#3d3456'); px(0,74,160,36,'#2a2340');
-  // 창문
-  px(118,10,32,24,'#1c1830'); px(120,12,13,9,'#8ea8d8'); px(135,12,13,9,'#a8bce0');
-  px(120,23,13,9,'#7c96c8'); px(135,23,13,9,'#93aad4');
-  // 벽 포스터
-  px(8,10,20,26,'#b3222d'); px(11,14,14,3,'#fff'); px(11,20,14,2,'#e8b0b4'); px(11,24,10,2,'#e8b0b4');
-  px(12,29,12,5,'#8c1a22');
+  px(0,0,128,64,'#3d3456'); px(0,64,128,24,'#2a2340');
+  // 창문 (오른쪽)
+  px(98,8,26,20,'#1c1830'); px(100,10,10,7,'#8ea8d8'); px(112,10,10,7,'#a8bce0');
+  px(100,19,10,7,'#7c96c8'); px(112,19,10,7,'#93aad4');
+  // 벽 포스터 (왼쪽)
+  px(6,8,18,24,'#b3222d'); px(9,12,12,3,'#fff'); px(9,18,12,2,'#e8b0b4'); px(9,22,9,2,'#e8b0b4');
+  px(10,26,10,4,'#8c1a22');
 
-  // ----- 의자 (등받이) -----
-  const hx = 52, hy = 26;   // 담당자 머리 기준점
+  // ----- 담당자 (화면 중앙, 클로즈업) -----
+  const hx = 56, hy = 26;
   const frown = anim.frown > 0;
-  const dip = frown ? 1 : 0;
-  px(hx-8, hy+10, 32, 36, '#463a63');       // 등받이
-  px(hx-8, hy+10, 32, 2, '#584a7c');
-  px(hx-10, hy+16, 2, 20, '#463a63'); px(hx+24, hy+16, 2, 20, '#463a63');
-
-  // ----- 담당자 (책상 뒤, 노트북 앞) -----
-  // 몸통 — 책상까지 이어져서 바닥에 안 뜸
-  px(hx-4, hy+17+dip, 24, 30, p.top);
+  const dip = frown ? 2 : 0;   // 콩 맞으면 움찔
+  // 의자 등받이
+  px(hx-9, hy+9, 34, 30, '#463a63');
+  px(hx-9, hy+9, 34, 2, '#584a7c');
+  // 몸통 (책상까지 이어짐)
+  px(hx-4, hy+17+dip, 24, 22, p.top);
   px(hx-2, hy+20+dip, 3, 14, shade(p.top));
   px(hx+15, hy+20+dip, 3, 14, shade(p.top));
-  // 어깨→노트북으로 뻗는 팔
+  // 팔
   px(hx-6, hy+26+dip, 4, 12, p.top); px(hx+18, hy+26+dip, 4, 12, p.top);
   // 머리
   px(hx, hy+dip, 16, 16, '#f5cfa7');
@@ -283,31 +291,30 @@ function drawScene(){
 
   // ----- 헤어 -----
   const hc = p.hair;
-  if(p.hairStyle==='long'){ // 이슬: 검정에 가까운 긴 생머리
+  if(p.hairStyle==='long'){
     px(hx-2,hy-2+dip,20,7,hc);
     px(hx-3,hy+3+dip,3,26,hc); px(hx+16,hy+3+dip,3,26,hc);
     px(hx-2,hy+24+dip,2,4,hc); px(hx+16,hy+24+dip,2,4,hc);
   }
-  if(p.hairStyle==='wave'){ // 민희: 웨이브 컬 긴 머리
+  if(p.hairStyle==='wave'){
     px(hx-3,hy-2+dip,22,7,hc);
     for(let i=0;i<9;i++){
       const off = (i%2===0)?0:1;
       px(hx-4+off, hy+4+i*3+dip, 3, 3, hc);
       px(hx+17-off, hy+4+i*3+dip, 3, 3, hc);
     }
-    // 끝 컬 뭉침
     px(hx-5,hy+30+dip,4,3,hc); px(hx+17,hy+30+dip,4,3,hc);
   }
-  if(p.hairStyle==='bob'){ // 우리: 검정 똑단발
+  if(p.hairStyle==='bob'){
     px(hx-2,hy-2+dip,20,6,hc);
     px(hx-3,hy+2+dip,3,13,hc); px(hx+16,hy+2+dip,3,13,hc);
-    px(hx-2,hy+13+dip,3,2,hc); px(hx+15,hy+13+dip,3,2,hc); // 일자 커트 라인
+    px(hx-2,hy+13+dip,3,2,hc); px(hx+15,hy+13+dip,3,2,hc);
   }
-  if(p.hairStyle==='tied'){ // 지영: 검정 묶은 머리
+  if(p.hairStyle==='tied'){
     px(hx-1,hy-2+dip,18,6,hc);
     px(hx-2,hy+2+dip,2,7,hc); px(hx+16,hy+2+dip,2,7,hc);
-    px(hx+18,hy+dip,5,5,hc);              // 묶은 뭉치
-    px(hx+20,hy+5+dip,3,9,hc);            // 포니테일
+    px(hx+18,hy+dip,5,5,hc);
+    px(hx+20,hy+5+dip,3,9,hc);
     px(hx+21,hy+14+dip,2,3,hc);
   }
 
@@ -320,72 +327,49 @@ function drawScene(){
     px(hx+12,hy+7+dip,2,1,'#222'); px(hx+10,hy+8+dip,2,1,'#222');
     px(hx+6,hy+11+dip,4,2,'#a55'); px(hx+5,hy+12+dip,1,1,'#a55'); px(hx+10,hy+12+dip,1,1,'#a55');
     px(hx+1,hy+13+dip,2,2,'#f0a0a0'); px(hx+13,hy+13+dip,2,2,'#f0a0a0');
-    px(hx+20,hy-7,1,3,'#ff5a63'); px(hx+23,hy-7,1,3,'#ff5a63');
-    px(hx+19,hy-6,1,1,'#ff5a63'); px(hx+24,hy-6,1,1,'#ff5a63');
+    px(hx+20,hy-6,1,3,'#ff5a63'); px(hx+23,hy-6,1,3,'#ff5a63');
+    px(hx+19,hy-5,1,1,'#ff5a63'); px(hx+24,hy-5,1,1,'#ff5a63');
   }
   if(anim.sweat>0){ px(hx-5, hy+5+Math.floor((1-anim.sweat)*8), 2,3,'#9fd8f0'); }
 
-  // ----- 책상 (담당자 몸 하부를 가림 → 안 떠보임) -----
-  px(14,72,132,6,'#8a5a30'); px(14,71,132,1,'#a8763f');
-  px(18,78,6,28,'#6e4524'); px(136,78,6,28,'#6e4524');
+  // ----- 책상 -----
+  px(10,62,108,5,'#8a5a30'); px(10,61,108,1,'#a8763f');
+  px(14,67,6,20,'#6e4524'); px(108,67,6,20,'#6e4524');
 
-  // ----- 맥북 (뚜껑 뒷면이 우리 쪽) -----
-  px(40,70,36,2,'#e2e4ea');                 // 하판
-  px(42,69,32,1,'#c9cbd2');
-  px(42,46,32,24,'#c9cbd2');                // 뚜껑
-  px(42,46,32,1,'#e8eaf0'); px(42,46,1,24,'#b4b6be');
-  px(73,46,1,24,'#a7a9b0'); px(42,69,32,1,'#a7a9b0');
-  // 로고 (빛나는 점)
-  px(56,55,4,5,'#f5f5f7'); px(57,54,2,1,'#f5f5f7'); px(59,53,1,1,'#f5f5f7');
-
-  // ----- 호출 벨 (책상 오른쪽) -----
-  const bx = 104, by = 64;
-  const sq = anim.bell;
-  const bh = 8 - Math.round(sq*3);
-  px(bx-1, by+6, 14, 2, '#5a4a22');
-  px(bx, by+6-bh, 12, bh, '#f0c33c');
-  px(bx+1, by+7-bh, 10, 1, '#f8dd80');
-  px(bx+4, by+4-bh, 4, 2, '#3a3020');
-  if(sq>0.3){
-    px(bx-5,by-2,2,1,'#fff8d0'); px(bx+15,by-2,2,1,'#fff8d0');
-    px(bx-7,by+2,2,1,'#ffec9a'); px(bx+17,by+2,2,1,'#ffec9a');
-  }
-
-  // ----- 뿅망치: 위로 치켜들었다가 위→아래로 내려침 -----
-  // 그립(피벗)은 벨 오른쪽 아래 고정, 헤드가 머리 위에서 호를 그리며 벨 위로 떨어짐
-  const drop = anim.hammer;                 // 1=타격 순간, 0=대기
-  const Px2 = bx+22, Py2 = by+2;            // 그립 위치
-  const Lh = 20;                            // 손잡이 길이
-  const restA = 0.6;                        // 대기: 헤드가 위로 치켜든 각도
-  const hitA  = -0.93;                      // 타격: 헤드가 벨 꼭지 위
-  const psi = restA + (hitA - restA) * drop;
-  ctx.save();
-  ctx.translate(Px2*S, Py2*S);
-  ctx.rotate(psi);
-  // 손잡이 (그립에서 위로)
-  ctx.fillStyle='#c9903a'; ctx.fillRect(-1.5*S, -Lh*S, 3*S, Lh*S);
-  ctx.fillStyle='#e0ad55'; ctx.fillRect(-0.5*S, -Lh*S, 1*S, Lh*S);
-  // 두 손 (그립 위아래)
-  ctx.fillStyle='#f5cfa7';
-  ctx.fillRect(-3*S, -8*S, 6*S, 5*S);
-  ctx.fillRect(-3*S, -2*S, 6*S, 5*S);
-  // 뿅망치 헤드 (손잡이 끝에 가로 원통)
-  ctx.fillStyle='#ffd94a'; ctx.fillRect(-11*S, (-Lh-9)*S, 22*S, 9*S);
-  ctx.fillStyle='#e50914'; ctx.fillRect(-11*S, (-Lh-9)*S, 4*S, 9*S); ctx.fillRect(7*S, (-Lh-9)*S, 4*S, 9*S);
-  ctx.fillStyle='#fff';    ctx.fillRect(-6*S, (-Lh-8)*S, 2*S, 7*S);  ctx.fillRect(4*S, (-Lh-8)*S, 2*S, 7*S);
-  ctx.fillStyle='#ffe98a'; ctx.fillRect(-10*S, (-Lh-8)*S, 20*S, 1*S);
-  ctx.restore();
-  // 타격 순간 스피드라인 (벨 위쪽, 수직)
-  if(drop>0.5){
-    px(bx+2, by-22, 1, 5, '#fff');  px(bx+10, by-24, 1, 5, '#fff');
-    px(bx+6, by-27, 1, 4, '#ffd94a');
-  }
-
-  // ----- 이름표 -----
-  ctx.fillStyle='#fff'; ctx.font = `${3.2*S}px Galmuri11, monospace`;
+  // ----- 맥북 (뚜껑에 이름) -----
+  px(44,60,40,2,'#e2e4ea');                  // 하판
+  px(46,59,36,1,'#c9cbd2');
+  px(46,44,36,16,'#c9cbd2');                 // 뚜껑
+  px(46,44,36,1,'#e8eaf0'); px(46,44,1,16,'#b4b6be');
+  px(81,44,1,16,'#a7a9b0'); px(46,59,36,1,'#a7a9b0');
+  // 이름 (뚜껑 위, 진한 색으로)
+  ctx.fillStyle='#33384a';
+  ctx.font = `bold ${3.4*S}px Galmuri11, monospace`;
   ctx.textAlign='center';
-  ctx.fillText(p.name+'님', (hx+8)*S, 103*S);
-  px(hx-2, 97, 20, 1, '#4a3f68');
+  ctx.fillText(p.name+'님', 64*S, 54.5*S);
+
+  // ----- 뿅망치: 머리 바로 위에서 수직으로 콩 -----
+  const cx = hx+8;                           // 머리 중앙
+  const drop = anim.hammer;                  // 1=타격, 0=대기(화면 위로 감아올림)
+  const restY = 2, hitY = hy+dip-9;          // 헤드 상단 y
+  const hy2 = restY + (hitY-restY)*drop;
+  // 손잡이 (헤드 위로, 대기 시엔 화면 밖)
+  px(cx-1.5, hy2-13, 3, 14, '#c9903a');
+  px(cx-0.5, hy2-13, 1, 14, '#e0ad55');
+  // 두 손
+  px(cx-3, hy2-12, 6, 5, '#f5cfa7');
+  px(cx-3, hy2-6, 6, 5, '#f5cfa7');
+  // 헤드 (가로 원통)
+  px(cx-11, hy2, 22, 9, '#ffd94a');
+  px(cx-11, hy2, 4, 9, '#e50914'); px(cx+7, hy2, 4, 9, '#e50914');
+  px(cx-6, hy2+1, 2, 7, '#fff');   px(cx+4, hy2+1, 2, 7, '#fff');
+  px(cx-10, hy2+1, 20, 1, '#ffe98a');
+  // 타격 이펙트: 스피드라인 + 별
+  if(drop>0.5){
+    px(cx-14, hy2-4, 1, 4, '#fff'); px(cx+13, hy2-4, 1, 4, '#fff');
+    px(cx-17, hy+2, 2, 2, '#ffd94a'); px(cx+15, hy, 2, 2, '#ffd94a');
+    px(cx-13, hy-5, 2, 2, '#fff8d0'); px(cx+11, hy-6, 2, 2, '#fff8d0');
+  }
 }
 
 // ================= 애니메이션 루프 =================
@@ -393,7 +377,6 @@ let last=0;
 function loop(t){
   const dt=(t-last)/1000; last=t;
   if(anim.hammer>0) anim.hammer=Math.max(0,anim.hammer-dt*7);
-  if(anim.bell>0)   anim.bell  =Math.max(0,anim.bell-dt*5);
   if(anim.frown>0)  anim.frown =Math.max(0,anim.frown-dt);
   if(anim.sweat>0)  anim.sweat =Math.max(0,anim.sweat-dt*1.2);
   drawScene();
@@ -403,22 +386,95 @@ requestAnimationFrame(loop);
 
 // ================= 사운드 =================
 let AC;
-function ding(){
+function audio(){ AC = AC || new (window.AudioContext||window.webkitAudioContext)(); return AC; }
+function bonkSound(){
   try{
-    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
-    const t0=AC.currentTime, pitch=880*(1+Math.min(combo,40)*0.012);
-    [[pitch,0.5],[pitch*2.76,0.18]].forEach(([f,v])=>{
-      const o=AC.createOscillator(), g=AC.createGain();
-      o.type='sine'; o.frequency.value=f;
-      g.gain.setValueAtTime(v,t0); g.gain.exponentialRampToValueAtTime(0.001,t0+0.45);
-      o.connect(g); g.connect(AC.destination); o.start(t0); o.stop(t0+0.5);
+    const a=audio(), t0=a.currentTime;
+    const base=900*(1+Math.min(combo,40)*0.008);
+    const o=a.createOscillator(), g=a.createGain();
+    o.type='square'; o.frequency.setValueAtTime(base,t0);
+    o.frequency.exponentialRampToValueAtTime(base*0.4, t0+0.09);
+    g.gain.setValueAtTime(0.25,t0); g.gain.exponentialRampToValueAtTime(0.001,t0+0.12);
+    o.connect(g); g.connect(a.destination); o.start(t0); o.stop(t0+0.14);
+    const o2=a.createOscillator(), g2=a.createGain();
+    o2.type='sine'; o2.frequency.value=base*2.2;
+    g2.gain.setValueAtTime(0.12,t0); g2.gain.exponentialRampToValueAtTime(0.001,t0+0.08);
+    o2.connect(g2); g2.connect(a.destination); o2.start(t0); o2.stop(t0+0.1);
+  }catch(e){}
+}
+function fanfare(){
+  try{
+    const a=audio(), t0=a.currentTime;
+    const notes=[523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((f,i)=>{
+      const o=a.createOscillator(), g=a.createGain(), t=t0+i*0.14;
+      o.type='triangle'; o.frequency.value=f;
+      g.gain.setValueAtTime(0.28,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.32);
+      o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+0.35);
+    });
+    // 마지막 화음
+    notes.forEach(f=>{
+      const o=a.createOscillator(), g=a.createGain(), t=t0+0.62;
+      o.type='triangle'; o.frequency.value=f;
+      g.gain.setValueAtTime(0.18,t); g.gain.exponentialRampToValueAtTime(0.001,t+1.1);
+      o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+1.15);
     });
   }catch(e){}
+}
+
+// ================= 폭죽 =================
+const fxc=document.getElementById('fx'), fx=fxc.getContext('2d');
+let fxParts=[], fxUntil=0, fxRunning=false, fxLastBurst=0;
+function burst(){
+  const x=60+Math.random()*520, y=40+Math.random()*220;
+  const hue=Math.floor(Math.random()*360);
+  for(let i=0;i<34;i++){
+    const ang=Math.random()*Math.PI*2, sp=60+Math.random()*180;
+    fxParts.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,life:0.9+Math.random()*0.5,
+      c:`hsl(${hue+Math.random()*40},95%,${55+Math.random()*25}%)`});
+  }
+}
+let fxLastT=0;
+function fxLoop(t){
+  const dt=Math.min((t-fxLastT)/1000,0.05); fxLastT=t;
+  fx.clearRect(0,0,640,440);
+  if(performance.now()<fxUntil && performance.now()-fxLastBurst>320){ burst(); fxLastBurst=performance.now(); }
+  fxParts.forEach(p=>{
+    p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=240*dt;
+    if(p.life>0){ fx.fillStyle=p.c; fx.globalAlpha=Math.min(1,p.life*2); fx.fillRect(p.x,p.y,4,4); }
+  });
+  fx.globalAlpha=1;
+  fxParts=fxParts.filter(p=>p.life>0);
+  if(fxParts.length||performance.now()<fxUntil) requestAnimationFrame(fxLoop);
+  else { fxRunning=false; fx.clearRect(0,0,640,440); }
+}
+function startFireworks(ms){
+  fxUntil=performance.now()+ms; fxLastBurst=0;
+  if(!fxRunning){ fxRunning=true; fxLastT=performance.now(); requestAnimationFrame(fxLoop); }
+}
+
+// ================= 레어 이벤트: 컨펌 빵빠레 =================
+function celebrate(quote){
+  celebrating=true;
+  clearTimeout(comboTimer);
+  fanfare();
+  startFireworks(4200);
+  const d=document.createElement('div');
+  d.className='celebrate';
+  d.innerHTML=`<div class="c-title">🎊 컨펌 떴다!!! 🎊</div>
+    <div class="c-quote">"${quote}"</div>
+    <div class="c-sub">— ${PEOPLE[cur].name}님 · 이 순간을 캡처하세요 📸 (목격자: 나)</div>`;
+  wrap.appendChild(d);
+  setTimeout(()=>{
+    d.remove(); celebrating=false;
+    comboTimer=setTimeout(()=>{combo=0; updateHud();},1300);
+  }, 4400);
 }
 
 // ================= 게임 로직 =================
 const wrap=document.getElementById('stageWrap');
 function hit(){
+  if(celebrating) return;   // 빵빠레 감상 시간 (연타 무시)
   const p=PEOPLE[cur];
   checkRollover();
   bucket(store.daily,K.day)[cur]++;
@@ -427,18 +483,21 @@ function hit(){
   store.myTotal++;
   if(sharedOn) pending[cur]++;
   combo++; maxCombo=Math.max(maxCombo,combo);
-  anim.hammer=1; anim.bell=1; anim.frown=0.6;
+  anim.hammer=1; anim.frown=0.6;
   if(combo%7===0) anim.sweat=1;
-  ding(); save();
+  bonkSound(); save();
   clearTimeout(comboTimer);
   comboTimer=setTimeout(()=>{combo=0; updateHud();},1300);
 
-  spawnFloat(combo%10===0?'띵——!!':'띵!', 400+Math.random()*60, 180+Math.random()*30);
+  spawnFloat(combo%10===0?'콩——!!':'콩!', 350+Math.random()*60, 90+Math.random()*30);
 
-  // 낮은 확률(0.1%): 담당자의 희망고문 답변
+  // 아주 낮은 확률(0.1%): 컨펌 빵빠레
   if(Math.random()<0.001){
-    speak(RARE[Math.floor(Math.random()*RARE.length)], false, true);
-  } else if(combo%9===0){
+    updateHud();
+    celebrate(RARE[Math.floor(Math.random()*RARE.length)]);
+    return;
+  }
+  if(combo%9===0){
     speak(REACTIONS[Math.floor(Math.random()*REACTIONS.length)]);
   } else if(combo===1||combo%5===0){
     speak(p.name+'님~!! 🙏', true);
@@ -456,16 +515,16 @@ function spawnFloat(txt,x,y){
   wrap.appendChild(d); setTimeout(()=>d.remove(),850);
 }
 let bubbleEl=null, bubbleT=null;
-function speak(txt,isMe,isRare){
+function speak(txt,isMe){
   if(bubbleEl) bubbleEl.remove();
   bubbleEl=document.createElement('div');
-  bubbleEl.className='bubble'+(isRare?' rare':'');
+  bubbleEl.className='bubble';
   bubbleEl.textContent=txt;
   if(isMe){ bubbleEl.style.right='30px'; bubbleEl.style.top='26px'; }
-  else { bubbleEl.style.left='110px'; bubbleEl.style.top='24px'; }
+  else { bubbleEl.style.left='60px'; bubbleEl.style.top='80px'; }
   wrap.appendChild(bubbleEl);
   clearTimeout(bubbleT);
-  bubbleT=setTimeout(()=>{bubbleEl&&bubbleEl.remove(); bubbleEl=null;}, isRare?2200:1400);
+  bubbleT=setTimeout(()=>{bubbleEl&&bubbleEl.remove(); bubbleEl=null;}, 1400);
 }
 function banner(txt){
   const d=document.createElement('div'); d.className='banner'; d.textContent=txt;

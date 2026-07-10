@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>컨펌벨 🔔 — 컨펌 재촉 스트레스 해소 게임</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; }
+  body {
+    font-family:'Galmuri11','DungGeunMo',ui-monospace,monospace,sans-serif;
+    background:#1a1625;
+    color:#fff;
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100vh; padding:16px; user-select:none;
+    background-image:
+      radial-gradient(circle at 20% 10%, #2b2340 0%, transparent 50%),
+      radial-gradient(circle at 80% 90%, #251b38 0%, transparent 50%);
+  }
+  @font-face { font-family:'Galmuri11'; src:url('https://cdn.jsdelivr.net/gh/quiple/galmuri@main/dist/Galmuri11.woff2') format('woff2'); }
+  h1 { font-size:26px; letter-spacing:2px; margin:8px 0 2px; color:#ffd94a; text-shadow:3px 3px 0 #b3222d; }
+  .sub { font-size:12px; color:#9d93b8; margin-bottom:14px; }
+  .tabs { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; justify-content:center; }
+  .tab {
+    background:#2c2440; border:2px solid #4a3f68; color:#cfc6e8;
+    padding:8px 14px; font-family:inherit; font-size:14px; cursor:pointer;
+    border-radius:4px; display:flex; align-items:center; gap:8px;
+    transition:transform .08s;
+  }
+  .tab:hover { transform:translateY(-2px); }
+  .tab.on { background:#e50914; border-color:#ff5a63; color:#fff; box-shadow:0 4px 0 #8c0d14; }
+  .tab canvas { image-rendering:pixelated; }
+  .stage-wrap { position:relative; }
+  #stage {
+    image-rendering:pixelated; border:3px solid #4a3f68; border-radius:6px;
+    background:#000; cursor:pointer; display:block;
+    max-width:100%; height:auto;
+  }
+  .stage-wrap.shake { animation:shake .25s; }
+  @keyframes shake {
+    0%,100%{transform:translate(0,0)} 20%{transform:translate(-5px,3px)}
+    40%{transform:translate(5px,-3px)} 60%{transform:translate(-4px,-2px)} 80%{transform:translate(3px,2px)}
+  }
+  .float-text {
+    position:absolute; font-size:18px; font-weight:bold; color:#ffd94a;
+    text-shadow:2px 2px 0 #000; pointer-events:none;
+    animation:floatUp .8s ease-out forwards; white-space:nowrap;
+  }
+  @keyframes floatUp { 0%{opacity:1; transform:translateY(0) scale(1)} 100%{opacity:0; transform:translateY(-46px) scale(1.4)} }
+  .bubble {
+    position:absolute; background:#fff; color:#222; font-size:13px;
+    padding:8px 12px; border-radius:10px; pointer-events:none;
+    border:2px solid #222; animation:pop .18s ease-out; white-space:nowrap; z-index:5;
+  }
+  .bubble:after {
+    content:''; position:absolute; bottom:-8px; left:24px;
+    border:6px solid transparent; border-top-color:#222;
+  }
+  .bubble.rare { background:#fff8dc; border-color:#c9990a; color:#5a4500; font-weight:bold; }
+  .bubble.rare:after { border-top-color:#c9990a; }
+  @keyframes pop { 0%{transform:scale(.5); opacity:0} 100%{transform:scale(1); opacity:1} }
+  .banner {
+    position:absolute; top:38%; left:50%; transform:translate(-50%,-50%);
+    font-size:19px; color:#fff; background:rgba(229,9,20,.92);
+    padding:10px 20px; border-radius:6px; pointer-events:none;
+    animation:banner 1.7s ease forwards; text-align:center; z-index:6;
+    border:2px solid #ffd94a; white-space:nowrap; max-width:94%;
+  }
+  @keyframes banner {
+    0%{transform:translate(-50%,-50%) scale(.3); opacity:0}
+    12%{transform:translate(-50%,-50%) scale(1.1); opacity:1}
+    20%{transform:translate(-50%,-50%) scale(1)}
+    80%{opacity:1} 100%{opacity:0}
+  }
+  .hud { display:flex; gap:14px; margin-top:12px; font-size:13px; flex-wrap:wrap; justify-content:center; }
+  .hud .box { background:#2c2440; border:2px solid #4a3f68; padding:8px 16px; border-radius:4px; text-align:center; min-width:100px; }
+  .hud .num { font-size:22px; color:#ffd94a; display:block; margin-top:2px; }
+  .hud .combo-num { color:#ff5a63; }
+  #btn {
+    margin-top:14px; background:#e50914; border:none; color:#fff;
+    font-family:inherit; font-size:18px; padding:14px 44px; border-radius:8px;
+    cursor:pointer; box-shadow:0 6px 0 #8c0d14; letter-spacing:1px;
+  }
+  #btn:active { transform:translateY(5px); box-shadow:0 1px 0 #8c0d14; }
+  .board { margin-top:18px; width:min(480px,94vw); background:#2c2440; border:2px solid #4a3f68; border-radius:6px; padding:12px 16px; }
+  .board h2 { font-size:14px; color:#ffd94a; margin-bottom:2px; }
+  .board .mode { font-size:10px; color:#9d93b8; margin-bottom:8px; }
+  .row { display:flex; align-items:center; gap:10px; font-size:13px; padding:5px 0; }
+  .row .rank { width:26px; color:#9d93b8; }
+  .row .name { width:64px; }
+  .row .bar-wrap { flex:1; background:#1a1625; border-radius:3px; height:12px; overflow:hidden; }
+  .row .bar { height:100%; background:linear-gradient(90deg,#e50914,#ff7a45); width:0%; transition:width .3s; }
+  .row .cnt { width:80px; text-align:right; color:#ffd94a; }
+  .hint { margin-top:12px; font-size:11px; color:#6f6590; text-align:center; line-height:1.7; }
+</style>
+</head>
+<body>
+  <h1>🔔 컨펌벨</h1>
+  <div class="sub">컨펌이 늦어질 땐, 벨을 울리세요. (사람은 안 때려요. 우린 프로니까.)</div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="stage-wrap" id="stageWrap">
+    <canvas id="stage" width="640" height="440"></canvas>
+  </div>
+
+  <div class="hud">
+    <div class="box">현재 콤보<span class="num combo-num" id="combo">0</span></div>
+    <div class="box">최대 콤보<span class="num" id="maxCombo">0</span></div>
+    <div class="box">내 호출<span class="num" id="total">0</span></div>
+    <div class="box" id="teamBox" style="display:none">팀 누적<span class="num" id="teamTotal">0</span></div>
+  </div>
+
+  <button id="btn">🔔 컨펌 플리즈!</button>
+
+  <div class="board">
+    <h2>📊 호출 리더보드</h2>
+    <div class="mode" id="boardMode">개인 기록 (이 브라우저에 저장됨)</div>
+    <div id="board"></div>
+  </div>
+
+  <div class="hint">스페이스바 · 클릭 · 탭 = 벨 울리기 · 숫자키 1~4 = 담당자 변경<br>콤보 500까지 멘트가 있습니다. 도전하세요.</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  팀 공유(누적) 리더보드 설정 — 선택사항
+//  1) console.firebase.google.com 에서 무료 프로젝트 생성
+//  2) Realtime Database 만들기 (테스트 모드로 시작)
+//  3) 아래에 DB URL 붙여넣기 (끝에 /confirmbell 추가)
+//  예: 'https://my-project-default-rtdb.firebaseio.com/confirmbell'
+//  비워두면("") 개인 기록 모드(이 브라우저에만 저장)로 동작.
+// ═══════════════════════════════════════════════════════════
+const SHARED_DB_URL = 'https://confirm-bell-default-rtdb.firebaseio.com/confirmbell';
+
+// ================= 담당자 데이터 =================
+const PEOPLE = [
+  { name:'이슬', hair:'#26180f', hairStyle:'long', top:'#7fb4d9' },
+  { name:'민희', hair:'#3b2313', hairStyle:'wave', top:'#e8a0b4' },
+  { name:'우리', hair:'#171310', hairStyle:'bob',  top:'#a4d4a0' },
+  { name:'지영', hair:'#171310', hairStyle:'tied', top:'#d9c47f' },
+];
+const REACTIONS = ['잠시만요~','아 네네 지금 볼게요','회의 중이에요;;','5분만요!!','아직 안 봤어요…','어 방금 열었어요'];
+const RARE = ['덱으로 볼게요!','앗 미팅이 많아 지금 보겠습니다','4시에 볼게요~','오늘까지 컨펌해두겠습니다','지금 바로 확인할게요!'];
+const MILESTONES = {
+  10:'어셋/카피/썸네일 컨펌 부탁드립니다 🙏',
+  20:'어셋/카피/썸네일 컨펌 리마인드 드립니다',
+  30:'덱에 핑 드렸습니다!',
+  40:'댓글 남겨드렸습니다!',
+  50:'오전에 슬랙 드렸습니다…',
+  70:'혹시 확인되셨을까요…?',
+  90:'리마인드의 리마인드 드립니다 🙇',
+  110:'오늘 업로드 건이라 한 번만 부탁드립니다',
+  140:'컨펌… 컨펌을 주세요…',
+  170:'현기증 난단 말이에요',
+  200:'어셋이 식어가고 있어요 🥶',
+  250:'혹시… 자리에 계실까요…?',
+  300:'저 이제 퇴근하고 싶어요',
+  350:'벨이 닳고 있습니다 🔔💦',
+  400:'이 정도면 텔레파시로 전달됐을 듯',
+  450:'벨: 저도 이제 지쳤어요',
+  500:'👑 전설의 컨펌 헌터 등극 👑'
+};
+
+// ================= 상태 & 저장 =================
+const LS_KEY = 'confirmbell_v2';
+let cur = 0;
+let stats = PEOPLE.map(()=>({count:0}));
+let combo = 0, maxCombo = 0, comboTimer = null;
+let sharedCounts = null; // 팀 모드일 때 서버 값
+let pending = [0,0,0,0]; // 서버 전송 대기분
+let anim = { hammer:0, bell:0, frown:0, sweat:0 };
+
+try {
+  const saved = JSON.parse(localStorage.getItem(LS_KEY));
+  if(saved){ stats = saved.stats || stats; maxCombo = saved.maxCombo || 0; }
+} catch(e){}
+function save(){
+  try { localStorage.setItem(LS_KEY, JSON.stringify({stats, maxCombo})); } catch(e){}
+}
+
+// ================= 팀 공유 동기화 (Firebase RTDB REST) =================
+const sharedOn = !!SHARED_DB_URL;
+if(sharedOn){
+  document.getElementById('teamBox').style.display='';
+  document.getElementById('boardMode').textContent='팀 누적 기록 (모두의 클릭이 합산됩니다)';
+  // 대기분 전송: 서버측 increment라 동시 접속자끼리도 안전하게 합산
+  setInterval(()=>{
+    pending.forEach((n,i)=>{
+      if(n>0){
+        const send=n; pending[i]=0;
+        fetch(`${SHARED_DB_URL}/counts/${i}.json`,{
+          method:'PUT', body:JSON.stringify({'.sv':{'increment':send}})
+        }).catch(()=>{ pending[i]+=send; }); // 실패 시 되돌림
+      }
+    });
+  }, 2500);
+  // 전체 값 폴링
+  const poll=()=>fetch(`${SHARED_DB_URL}/counts.json`).then(r=>r.json()).then(d=>{
+    if(d){ sharedCounts=[d[0]||0,d[1]||0,d[2]||0,d[3]||0]; updateHud(); }
+  }).catch(()=>{});
+  poll(); setInterval(poll, 6000);
+}
+
+// ================= 캔버스 =================
+const cv = document.getElementById('stage'), ctx = cv.getContext('2d');
+const S = 4; // 논리 해상도 160x110
+function px(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(Math.round(x*S),Math.round(y*S),Math.round(w*S),Math.round(h*S)); }
+function shade(hex){
+  const n=parseInt(hex.slice(1),16), r=(n>>16)*0.8|0, g=((n>>8)&255)*0.8|0, b=(n&255)*0.8|0;
+  return `rgb(${r},${g},${b})`;
+}
+
+function drawScene(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const p = PEOPLE[cur];
+
+  // ----- 배경 -----
+  px(0,0,160,74,'#3d3456'); px(0,74,160,36,'#2a2340');
+  // 창문
+  px(118,10,32,24,'#1c1830'); px(120,12,13,9,'#8ea8d8'); px(135,12,13,9,'#a8bce0');
+  px(120,23,13,9,'#7c96c8'); px(135,23,13,9,'#93aad4');
+  // 벽 포스터
+  px(8,10,20,26,'#b3222d'); px(11,14,14,3,'#fff'); px(11,20,14,2,'#e8b0b4'); px(11,24,10,2,'#e8b0b4');
+  px(12,29,12,5,'#8c1a22');
+
+  // ----- 의자 (등받이) -----
+  const hx = 52, hy = 26;   // 담당자 머리 기준점
+  const frown = anim.frown > 0;
+  const dip = frown ? 1 : 0;
+  px(hx-8, hy+10, 32, 36, '#463a63');       // 등받이
+  px(hx-8, hy+10, 32, 2, '#584a7c');
+  px(hx-10, hy+16, 2, 20, '#463a63'); px(hx+24, hy+16, 2, 20, '#463a63');
+
+  // ----- 담당자 (책상 뒤, 노트북 앞) -----
+  // 몸통 — 책상까지 이어져서 바닥에 안 뜸
+  px(hx-4, hy+17+dip, 24, 30, p.top);
+  px(hx-2, hy+20+dip, 3, 14, shade(p.top));
+  px(hx+15, hy+20+dip, 3, 14, shade(p.top));
+  // 어깨→노트북으로 뻗는 팔
+  px(hx-6, hy+26+dip, 4, 12, p.top); px(hx+18, hy+26+dip, 4, 12, p.top);
+  // 머리
+  px(hx, hy+dip, 16, 16, '#f5cfa7');
+  // 목
+  px(hx+5, hy+16+dip, 6, 2, '#eec49a');
+
+  // ----- 헤어 -----
+  const hc = p.hair;
+  if(p.hairStyle==='long'){ // 이슬: 검정에 가까운 긴 생머리
+    px(hx-2,hy-2+dip,20,7,hc);
+    px(hx-3,hy+3+dip,3,26,hc); px(hx+16,hy+3+dip,3,26,hc);
+    px(hx-2,hy+24+dip,2,4,hc); px(hx+16,hy+24+dip,2,4,hc);
+  }
+  if(p.hairStyle==='wave'){ // 민희: 웨이브 컬 긴 머리
+    px(hx-3,hy-2+dip,22,7,hc);
+    for(let i=0;i<9;i++){
+      const off = (i%2===0)?0:1;
+      px(hx-4+off, hy+4+i*3+dip, 3, 3, hc);
+      px(hx+17-off, hy+4+i*3+dip, 3, 3, hc);
+    }
+    // 끝 컬 뭉침
+    px(hx-5,hy+30+dip,4,3,hc); px(hx+17,hy+30+dip,4,3,hc);
+  }
+  if(p.hairStyle==='bob'){ // 우리: 검정 똑단발
+    px(hx-2,hy-2+dip,20,6,hc);
+    px(hx-3,hy+2+dip,3,13,hc); px(hx+16,hy+2+dip,3,13,hc);
+    px(hx-2,hy+13+dip,3,2,hc); px(hx+15,hy+13+dip,3,2,hc); // 일자 커트 라인
+  }
+  if(p.hairStyle==='tied'){ // 지영: 검정 묶은 머리
+    px(hx-1,hy-2+dip,18,6,hc);
+    px(hx-2,hy+2+dip,2,7,hc); px(hx+16,hy+2+dip,2,7,hc);
+    px(hx+18,hy+dip,5,5,hc);              // 묶은 뭉치
+    px(hx+20,hy+5+dip,3,9,hc);            // 포니테일
+    px(hx+21,hy+14+dip,2,3,hc);
+  }
+
+  // ----- 얼굴 -----
+  if(!frown){
+    px(hx+3,hy+8+dip,2,2,'#222'); px(hx+11,hy+8+dip,2,2,'#222');
+    px(hx+6,hy+12+dip,4,1,'#c96');
+  } else {
+    px(hx+2,hy+7+dip,2,1,'#222'); px(hx+4,hy+8+dip,2,1,'#222');
+    px(hx+12,hy+7+dip,2,1,'#222'); px(hx+10,hy+8+dip,2,1,'#222');
+    px(hx+6,hy+11+dip,4,2,'#a55'); px(hx+5,hy+12+dip,1,1,'#a55'); px(hx+10,hy+12+dip,1,1,'#a55');
+    px(hx+1,hy+13+dip,2,2,'#f0a0a0'); px(hx+13,hy+13+dip,2,2,'#f0a0a0');
+    px(hx+20,hy-7,1,3,'#ff5a63'); px(hx+23,hy-7,1,3,'#ff5a63');
+    px(hx+19,hy-6,1,1,'#ff5a63'); px(hx+24,hy-6,1,1,'#ff5a63');
+  }
+  if(anim.sweat>0){ px(hx-5, hy+5+Math.floor((1-anim.sweat)*8), 2,3,'#9fd8f0'); }
+
+  // ----- 책상 (담당자 몸 하부를 가림 → 안 떠보임) -----
+  px(14,72,132,6,'#8a5a30'); px(14,71,132,1,'#a8763f');
+  px(18,78,6,28,'#6e4524'); px(136,78,6,28,'#6e4524');
+
+  // ----- 맥북 (뚜껑 뒷면이 우리 쪽) -----
+  px(40,70,36,2,'#e2e4ea');                 // 하판
+  px(42,69,32,1,'#c9cbd2');
+  px(42,46,32,24,'#c9cbd2');                // 뚜껑
+  px(42,46,32,1,'#e8eaf0'); px(42,46,1,24,'#b4b6be');
+  px(73,46,1,24,'#a7a9b0'); px(42,69,32,1,'#a7a9b0');
+  // 로고 (빛나는 점)
+  px(56,55,4,5,'#f5f5f7'); px(57,54,2,1,'#f5f5f7'); px(59,53,1,1,'#f5f5f7');
+
+  // ----- 호출 벨 (책상 오른쪽) -----
+  const bx = 104, by = 64;
+  const sq = anim.bell;
+  const bh = 8 - Math.round(sq*3);
+  px(bx-1, by+6, 14, 2, '#5a4a22');
+  px(bx, by+6-bh, 12, bh, '#f0c33c');
+  px(bx+1, by+7-bh, 10, 1, '#f8dd80');
+  px(bx+4, by+4-bh, 4, 2, '#3a3020');
+  if(sq>0.3){
+    px(bx-5,by-2,2,1,'#fff8d0'); px(bx+15,by-2,2,1,'#fff8d0');
+    px(bx-7,by+2,2,1,'#ffec9a'); px(bx+17,by+2,2,1,'#ffec9a');
+  }
+
+  // ----- 뿅망치: 위로 치켜들었다가 위→아래로 내려침 -----
+  // 그립(피벗)은 벨 오른쪽 아래 고정, 헤드가 머리 위에서 호를 그리며 벨 위로 떨어짐
+  const drop = anim.hammer;                 // 1=타격 순간, 0=대기
+  const Px2 = bx+22, Py2 = by+2;            // 그립 위치
+  const Lh = 20;                            // 손잡이 길이
+  const restA = 0.6;                        // 대기: 헤드가 위로 치켜든 각도
+  const hitA  = -0.93;                      // 타격: 헤드가 벨 꼭지 위
+  const psi = restA + (hitA - restA) * drop;
+  ctx.save();
+  ctx.translate(Px2*S, Py2*S);
+  ctx.rotate(psi);
+  // 손잡이 (그립에서 위로)
+  ctx.fillStyle='#c9903a'; ctx.fillRect(-1.5*S, -Lh*S, 3*S, Lh*S);
+  ctx.fillStyle='#e0ad55'; ctx.fillRect(-0.5*S, -Lh*S, 1*S, Lh*S);
+  // 두 손 (그립 위아래)
+  ctx.fillStyle='#f5cfa7';
+  ctx.fillRect(-3*S, -8*S, 6*S, 5*S);
+  ctx.fillRect(-3*S, -2*S, 6*S, 5*S);
+  // 뿅망치 헤드 (손잡이 끝에 가로 원통)
+  ctx.fillStyle='#ffd94a'; ctx.fillRect(-11*S, (-Lh-9)*S, 22*S, 9*S);
+  ctx.fillStyle='#e50914'; ctx.fillRect(-11*S, (-Lh-9)*S, 4*S, 9*S); ctx.fillRect(7*S, (-Lh-9)*S, 4*S, 9*S);
+  ctx.fillStyle='#fff';    ctx.fillRect(-6*S, (-Lh-8)*S, 2*S, 7*S);  ctx.fillRect(4*S, (-Lh-8)*S, 2*S, 7*S);
+  ctx.fillStyle='#ffe98a'; ctx.fillRect(-10*S, (-Lh-8)*S, 20*S, 1*S);
+  ctx.restore();
+  // 타격 순간 스피드라인 (벨 위쪽, 수직)
+  if(drop>0.5){
+    px(bx+2, by-22, 1, 5, '#fff');  px(bx+10, by-24, 1, 5, '#fff');
+    px(bx+6, by-27, 1, 4, '#ffd94a');
+  }
+
+  // ----- 이름표 -----
+  ctx.fillStyle='#fff'; ctx.font = `${3.2*S}px Galmuri11, monospace`;
+  ctx.textAlign='center';
+  ctx.fillText(p.name+'님', (hx+8)*S, 103*S);
+  px(hx-2, 97, 20, 1, '#4a3f68');
+}
+
+// ================= 애니메이션 루프 =================
+let last=0;
+function loop(t){
+  const dt=(t-last)/1000; last=t;
+  if(anim.hammer>0) anim.hammer=Math.max(0,anim.hammer-dt*7);
+  if(anim.bell>0)   anim.bell  =Math.max(0,anim.bell-dt*5);
+  if(anim.frown>0)  anim.frown =Math.max(0,anim.frown-dt);
+  if(anim.sweat>0)  anim.sweat =Math.max(0,anim.sweat-dt*1.2);
+  drawScene();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ================= 사운드 =================
+let AC;
+function ding(){
+  try{
+    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+    const t0=AC.currentTime, pitch=880*(1+Math.min(combo,40)*0.012);
+    [[pitch,0.5],[pitch*2.76,0.18]].forEach(([f,v])=>{
+      const o=AC.createOscillator(), g=AC.createGain();
+      o.type='sine'; o.frequency.value=f;
+      g.gain.setValueAtTime(v,t0); g.gain.exponentialRampToValueAtTime(0.001,t0+0.45);
+      o.connect(g); g.connect(AC.destination); o.start(t0); o.stop(t0+0.5);
+    });
+  }catch(e){}
+}
+
+// ================= 게임 로직 =================
+const wrap=document.getElementById('stageWrap');
+function hit(){
+  const p=PEOPLE[cur];
+  stats[cur].count++; pending[cur]++;
+  combo++; maxCombo=Math.max(maxCombo,combo);
+  anim.hammer=1; anim.bell=1; anim.frown=0.6;
+  if(combo%7===0) anim.sweat=1;
+  ding(); save();
+  clearTimeout(comboTimer);
+  comboTimer=setTimeout(()=>{combo=0; updateHud();},1300);
+
+  spawnFloat(combo%10===0?'띵——!!':'띵!', 400+Math.random()*60, 180+Math.random()*30);
+
+  // 낮은 확률(1%): 담당자의 희망고문 답변
+  if(Math.random()<0.01){
+    speak(RARE[Math.floor(Math.random()*RARE.length)], false, true);
+  } else if(combo%9===0){
+    speak(REACTIONS[Math.floor(Math.random()*REACTIONS.length)]);
+  } else if(combo===1||combo%5===0){
+    speak(p.name+'님~!! 🙏', true);
+  }
+
+  if(MILESTONES[combo]){
+    banner(MILESTONES[combo]);
+    wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
+  }
+  updateHud();
+}
+function spawnFloat(txt,x,y){
+  const d=document.createElement('div'); d.className='float-text'; d.textContent=txt;
+  d.style.left=x+'px'; d.style.top=y+'px';
+  wrap.appendChild(d); setTimeout(()=>d.remove(),850);
+}
+let bubbleEl=null, bubbleT=null;
+function speak(txt,isMe,isRare){
+  if(bubbleEl) bubbleEl.remove();
+  bubbleEl=document.createElement('div');
+  bubbleEl.className='bubble'+(isRare?' rare':'');
+  bubbleEl.textContent=txt;
+  if(isMe){ bubbleEl.style.right='30px'; bubbleEl.style.top='26px'; }
+  else { bubbleEl.style.left='110px'; bubbleEl.style.top='24px'; }
+  wrap.appendChild(bubbleEl);
+  clearTimeout(bubbleT);
+  bubbleT=setTimeout(()=>{bubbleEl&&bubbleEl.remove(); bubbleEl=null;}, isRare?2200:1400);
+}
+function banner(txt){
+  const d=document.createElement('div'); d.className='banner'; d.textContent=txt;
+  wrap.appendChild(d); setTimeout(()=>d.remove(),1750);
+}
+
+// ================= HUD & 리더보드 =================
+const $=id=>document.getElementById(id);
+function updateHud(){
+  $('combo').textContent=combo;
+  $('maxCombo').textContent=maxCombo;
+  $('total').textContent=stats.reduce((a,s)=>a+s.count,0).toLocaleString();
+  const counts = (sharedOn && sharedCounts)
+    ? sharedCounts.map((n,i)=>n+pending[i])
+    : stats.map(s=>s.count);
+  if(sharedOn){ $('teamTotal').textContent=counts.reduce((a,b)=>a+b,0).toLocaleString(); }
+  const order=PEOPLE.map((p,i)=>({p,c:counts[i]})).sort((a,b)=>b.c-a.c);
+  const max=Math.max(1,order[0].c);
+  const medals=['🥇','🥈','🥉','4위'];
+  $('board').innerHTML=order.map((o,i)=>
+    `<div class="row"><span class="rank">${medals[i]}</span><span class="name">${o.p.name}님</span>
+     <span class="bar-wrap"><span class="bar" style="width:${o.c/max*100}%"></span></span>
+     <span class="cnt">${o.c.toLocaleString()}회</span></div>`).join('');
+}
+
+// ================= 캐릭터 탭 =================
+function avatarCanvas(p){
+  const c=document.createElement('canvas'); c.width=20; c.height=20;
+  c.style.width='20px'; c.style.height='20px';
+  const x=c.getContext('2d');
+  x.fillStyle='#f5cfa7'; x.fillRect(4,6,12,12);
+  x.fillStyle=p.hair; x.fillRect(3,4,14,5);
+  if(p.hairStyle==='long'||p.hairStyle==='wave'){ x.fillRect(2,8,3,12); x.fillRect(15,8,3,12); }
+  if(p.hairStyle==='bob'){ x.fillRect(2,8,3,8); x.fillRect(15,8,3,8); }
+  if(p.hairStyle==='tied'){ x.fillRect(16,3,4,5); }
+  x.fillStyle='#222'; x.fillRect(7,12,2,2); x.fillRect(12,12,2,2);
+  return c;
+}
+const tabs=$('tabs');
+PEOPLE.forEach((p,i)=>{
+  const b=document.createElement('button'); b.className='tab'+(i===0?' on':'');
+  b.appendChild(avatarCanvas(p));
+  b.appendChild(document.createTextNode(p.name+'님'));
+  b.onclick=()=>{ cur=i; combo=0; document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('on',j===i)); updateHud(); speak('…네? 저요?'); };
+  tabs.appendChild(b);
+});
+
+// ================= 입력 =================
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'){ e.preventDefault(); hit(); }
+  if(e.key>='1'&&e.key<='4'){ document.querySelectorAll('.tab')[+e.key-1].click(); }
+});
+cv.addEventListener('pointerdown',e=>{e.preventDefault(); hit();});
+$('btn').addEventListener('pointerdown',e=>{e.preventDefault(); hit();});
+updateHud();
+</script>
+</body>
+</html>

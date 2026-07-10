@@ -91,6 +91,7 @@
   .row .bar-wrap { flex:1; background:#1a1625; border-radius:3px; height:12px; overflow:hidden; }
   .row .bar { height:100%; background:linear-gradient(90deg,#e50914,#ff7a45); width:0%; transition:width .3s; }
   .row .cnt { width:80px; text-align:right; color:#ffd94a; }
+  .yearline { margin-top:10px; padding-top:8px; border-top:1px solid #4a3f68; font-size:11px; color:#9d93b8; text-align:center; }
   .hint { margin-top:12px; font-size:11px; color:#6f6590; text-align:center; line-height:1.7; }
 </style>
 </head>
@@ -108,15 +109,21 @@
     <div class="box">현재 콤보<span class="num combo-num" id="combo">0</span></div>
     <div class="box">최대 콤보<span class="num" id="maxCombo">0</span></div>
     <div class="box">내 호출<span class="num" id="total">0</span></div>
-    <div class="box" id="teamBox" style="display:none">팀 누적<span class="num" id="teamTotal">0</span></div>
+    <div class="box">오늘 호출<span class="num" id="teamToday">0</span></div>
   </div>
 
   <button id="btn">🔔 컨펌 플리즈!</button>
 
   <div class="board">
-    <h2>📊 호출 리더보드</h2>
+    <h2>📊 오늘의 리더보드</h2>
     <div class="mode" id="boardMode">개인 기록 (이 브라우저에 저장됨)</div>
-    <div id="board"></div>
+    <div id="boardToday"></div>
+  </div>
+
+  <div class="board">
+    <h2>🗓 이번 달 리더보드</h2>
+    <div id="boardMonth"></div>
+    <div class="yearline" id="yearLine"></div>
   </div>
 
   <div class="hint">스페이스바 · 클릭 · 탭 = 벨 울리기 · 숫자키 1~4 = 담당자 변경<br>콤보 500까지 멘트가 있습니다. 도전하세요.</div>
@@ -162,42 +169,73 @@ const MILESTONES = {
 };
 
 // ================= 상태 & 저장 =================
-const LS_KEY = 'confirmbell_v2';
+// 수치는 일/월/연 "버킷"에 저장 → 00시·월초·연초에 자동으로 새 버킷 시작(리셋),
+// 지난 버킷은 지우지 않으므로 그대로 아카이브가 된다.
+const LS_KEY = 'confirmbell_v3';
+const pad = n=>String(n).padStart(2,'0');
+function nowKeys(){
+  const d=new Date();
+  const day=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  return { day, mon: day.slice(0,7), year: day.slice(0,4) };
+}
+let K = nowKeys();
 let cur = 0;
-let stats = PEOPLE.map(()=>({count:0}));
+let store = { daily:{}, monthly:{}, yearly:{}, myTotal:0, maxCombo:0 }; // 개인 기록(브라우저)
 let combo = 0, maxCombo = 0, comboTimer = null;
-let sharedCounts = null; // 팀 모드일 때 서버 값
+let shared = { daily:null, monthly:null, yearly:null }; // 팀 모드 서버 값
 let pending = [0,0,0,0]; // 서버 전송 대기분
 let anim = { hammer:0, bell:0, frown:0, sweat:0 };
 
 try {
   const saved = JSON.parse(localStorage.getItem(LS_KEY));
-  if(saved){ stats = saved.stats || stats; maxCombo = saved.maxCombo || 0; }
+  if(saved){ store = Object.assign(store, saved); maxCombo = store.maxCombo || 0; }
 } catch(e){}
 function save(){
-  try { localStorage.setItem(LS_KEY, JSON.stringify({stats, maxCombo})); } catch(e){}
+  store.maxCombo = maxCombo;
+  try { localStorage.setItem(LS_KEY, JSON.stringify(store)); } catch(e){}
 }
+function bucket(obj,key){ return obj[key] || (obj[key]=[0,0,0,0]); }
+
+// 자정/월초/연초 롤오버: 날짜 키가 바뀌면 보드가 자동 전환된다
+function checkRollover(){
+  const k = nowKeys();
+  if(k.day !== K.day){
+    K = k;
+    shared = { daily:null, monthly:null, yearly:null };
+    if(sharedOn) poll();
+    updateHud();
+  }
+}
+setInterval(checkRollover, 20000);
 
 // ================= 팀 공유 동기화 (Firebase RTDB REST) =================
 const sharedOn = !!SHARED_DB_URL;
+let poll = ()=>{};
 if(sharedOn){
-  document.getElementById('teamBox').style.display='';
-  document.getElementById('boardMode').textContent='팀 누적 기록 (모두의 클릭이 합산됩니다)';
+  document.getElementById('boardMode').textContent='팀 전체 실시간 합산 · 00시/월초 자동 리셋';
   // 대기분 전송: 서버측 increment라 동시 접속자끼리도 안전하게 합산
   setInterval(()=>{
     pending.forEach((n,i)=>{
       if(n>0){
         const send=n; pending[i]=0;
-        fetch(`${SHARED_DB_URL}/counts/${i}.json`,{
-          method:'PUT', body:JSON.stringify({'.sv':{'increment':send}})
-        }).catch(()=>{ pending[i]+=send; }); // 실패 시 되돌림
+        [`daily/${K.day}`,`monthly/${K.mon}`,`yearly/${K.year}`].forEach((p,pi)=>{
+          fetch(`${SHARED_DB_URL}/${p}/${i}.json`,{
+            method:'PUT', body:JSON.stringify({'.sv':{'increment':send}})
+          }).catch(()=>{ if(pi===0) pending[i]+=send; }); // 실패 시 되돌림
+        });
       }
     });
   }, 2500);
-  // 전체 값 폴링
-  const poll=()=>fetch(`${SHARED_DB_URL}/counts.json`).then(r=>r.json()).then(d=>{
-    if(d){ sharedCounts=[d[0]||0,d[1]||0,d[2]||0,d[3]||0]; updateHud(); }
-  }).catch(()=>{});
+  // 일/월/연 버킷 폴링
+  poll = ()=>{
+    checkRollover();
+    const get=p=>fetch(`${SHARED_DB_URL}/${p}.json`).then(r=>r.json()).catch(()=>null);
+    Promise.all([get('daily/'+K.day), get('monthly/'+K.mon), get('yearly/'+K.year)]).then(([d,m,y])=>{
+      const norm=v=>[0,1,2,3].map(i=>(v&&v[i])||0);
+      shared = { daily:norm(d), monthly:norm(m), yearly:norm(y) };
+      updateHud();
+    });
+  };
   poll(); setInterval(poll, 6000);
 }
 
@@ -382,7 +420,12 @@ function ding(){
 const wrap=document.getElementById('stageWrap');
 function hit(){
   const p=PEOPLE[cur];
-  stats[cur].count++; pending[cur]++;
+  checkRollover();
+  bucket(store.daily,K.day)[cur]++;
+  bucket(store.monthly,K.mon)[cur]++;
+  bucket(store.yearly,K.year)[cur]++;
+  store.myTotal++;
+  if(sharedOn) pending[cur]++;
   combo++; maxCombo=Math.max(maxCombo,combo);
   anim.hammer=1; anim.bell=1; anim.frown=0.6;
   if(combo%7===0) anim.sweat=1;
@@ -431,21 +474,27 @@ function banner(txt){
 
 // ================= HUD & 리더보드 =================
 const $=id=>document.getElementById(id);
-function updateHud(){
-  $('combo').textContent=combo;
-  $('maxCombo').textContent=maxCombo;
-  $('total').textContent=stats.reduce((a,s)=>a+s.count,0).toLocaleString();
-  const counts = (sharedOn && sharedCounts)
-    ? sharedCounts.map((n,i)=>n+pending[i])
-    : stats.map(s=>s.count);
-  if(sharedOn){ $('teamTotal').textContent=counts.reduce((a,b)=>a+b,0).toLocaleString(); }
+function boardHtml(counts){
   const order=PEOPLE.map((p,i)=>({p,c:counts[i]})).sort((a,b)=>b.c-a.c);
   const max=Math.max(1,order[0].c);
   const medals=['🥇','🥈','🥉','4위'];
-  $('board').innerHTML=order.map((o,i)=>
+  return order.map((o,i)=>
     `<div class="row"><span class="rank">${medals[i]}</span><span class="name">${o.p.name}님</span>
      <span class="bar-wrap"><span class="bar" style="width:${o.c/max*100}%"></span></span>
      <span class="cnt">${o.c.toLocaleString()}회</span></div>`).join('');
+}
+function updateHud(){
+  $('combo').textContent=combo;
+  $('maxCombo').textContent=maxCombo;
+  $('total').textContent=(store.myTotal||0).toLocaleString();
+  const add=(a,b)=>a.map((v,i)=>v+b[i]);
+  const cD = sharedOn ? add(shared.daily  ||[0,0,0,0], pending) : bucket(store.daily,K.day).slice();
+  const cM = sharedOn ? add(shared.monthly||[0,0,0,0], pending) : bucket(store.monthly,K.mon).slice();
+  const cY = sharedOn ? add(shared.yearly ||[0,0,0,0], pending) : bucket(store.yearly,K.year).slice();
+  $('teamToday').textContent=cD.reduce((a,b)=>a+b,0).toLocaleString();
+  $('boardToday').innerHTML=boardHtml(cD);
+  $('boardMonth').innerHTML=boardHtml(cM);
+  $('yearLine').textContent=`🗄 ${K.year}년 팀 누적 ${cY.reduce((a,b)=>a+b,0).toLocaleString()}회 · 해가 바뀌면 이전 기록은 자동 보관됩니다`;
 }
 
 // ================= 캐릭터 탭 =================

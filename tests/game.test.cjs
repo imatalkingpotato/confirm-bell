@@ -10,13 +10,15 @@ function harness({preview=true,saved=null,reduced=false}={}){
     appendChild(c){c.parent=this;this.children.push(c);return c}
     remove(){if(this.parent)this.parent.children=this.parent.children.filter(c=>c!==this)}
     setAttribute(k,v){this.attrs[k]=v}
+    focus(){doc.activeElement=this}
     getContext(){return ctx}
     addEventListener(k,f){this.events[k]=f}
     click(){this.onclick?.();this.events.click?.({target:this})}
     querySelectorAll(q){const out=[];function walk(el){for(const c of el.children){if(c.className?.split(' ').includes(q.slice(1)))out.push(c);walk(c)}}walk(this);return out}
   }
-  const doc=new El();doc.head=new El();doc.getElementById=id=>{if(!elements.has(id))elements.set(id,new El());return elements.get(id)};
+  const doc=new El();doc.head=new El();doc.documentElement=new El();doc.getElementById=id=>{if(!elements.has(id))elements.set(id,new El());return elements.get(id)};
   doc.createElement=tag=>new El(tag);doc.createTextNode=text=>Object.assign(new El(),{textContent:text});
+  doc.querySelector=q=>doc.getElementById(q==='main'?'main':q.replace('#',''));
   doc.querySelectorAll=q=>q==='.tab'?elements.get('tabs').children:[];
   const context=vm.createContext({console,document:doc,location:{search:preview?'?preview=1':''},URLSearchParams,Date,Math,
     performance:{now:()=>now},matchMedia:()=>({matches:reduced}),window:{},
@@ -32,12 +34,12 @@ test('10,000 accepted hits preserve totals, trigger each milestone, and bound li
   const milestones=[];
   for(let i=1;i<=10000;i++){
     h.hit();
-    if(i%1000===0){const b=h.elements.get('stageWrap').querySelectorAll('.milestone');assert.equal(b.length,1);assert.equal(b[0].children[0].textContent,i.toLocaleString()+' COMBO');milestones.push(i)}
+    if(i%1000===0)milestones.push(i);
   }
   assert.deepEqual(milestones,[1000,2000,3000,4000,5000,6000,7000,8000,9000,10000]);
   assert.equal(h.run('combo'),10000);assert.equal(h.run('store.myTotal'),10000);
   assert.equal(h.run('store.daily[K.day][0]'),10000);
-  assert.equal(h.elements.get('rage').textContent,'풀스윙!');
+  assert.equal(h.elements.get('rage').textContent,'100%');
   assert.ok(h.run('debris.length')<=140);
   assert.ok(h.elements.get('stageWrap').querySelectorAll('.float-text').length<=8);
   assert.equal(h.fetches.length,0);assert.equal(h.writes.length,0);
@@ -96,8 +98,8 @@ test('injuries track each character lifetime independently of combo and stop at 
  h.run('Math.random=()=>.5');
  assert.equal(h.run('injuryLevel(0)'),0);h.hit();assert.equal(h.run('injuryLevel(0)'),1);
  for(const i of [1,2,3]){h.elements.get('tabs').children[i].click();h.hit();assert.equal(h.run(`injuryLevel(${i})`),i===3?5:i+1);}
- h.run('lifetimeHits[3]=5999');h.hit();assert.equal(h.run('injuryLevel(3)'),6);
- h.run('lifetimeHits[3]=10999');h.hit();assert.equal(h.run('injuryLevel(3)'),10);
+ h.run('roundHits[3]=5999');h.hit();assert.equal(h.run('injuryLevel(3)'),6);
+ h.run('roundHits[3]=10000');h.hit();assert.equal(h.run('injuryLevel(3)'),10);
  for(let level=0;level<=5;level++)h.run(`drawInjuries(56,27,${level})`);
  h.context.window.confirmBellIntroActive=true;const total=h.run('store.myTotal');h.hit();assert.equal(h.run('store.myTotal'),total);
 });
@@ -107,12 +109,28 @@ test('all ten stages render for all characters, including wheelchair and hospita
  for(let person=0;person<4;person++){
   h.run(`cur=${person}`);
   for(let level=0;level<=10;level++){
-   h.run(`lifetimeHits[cur]=${level*1000};anim.age=1;drawScene()`);
+   h.run(`roundHits[cur]=${level*1000};anim.age=1;drawScene()`);
    assert.equal(h.run('injuryLevel(cur)'),level);
-   h.hit();h.run('loop(100)');
+   if(level<10)h.hit();h.run('anim.age=.15;drawScene()');
   }
  }
- h.run('combo=49');h.hit();assert.equal(h.run('anim.power'),3.5);
- assert.equal(h.elements.get('rage').textContent,'풀스윙!');
- h.hit();assert.equal(h.elements.get('rage').textContent,'2%');
+ h.run('roundHits[cur]=4999;combo=49');h.hit();assert.equal(h.run('anim.power'),3.5);
+ assert.equal(h.elements.get('rage').textContent,'50%');
+ h.hit();assert.equal(h.elements.get('rage').textContent,'50%');
+});
+
+test('10,001st hit ends the round; restart resets play counters while preserving all leaderboard buckets and pending totals',()=>{
+ const h=harness({preview:false,saved:{daily:{},monthly:{},yearly:{2026:[100,200,300,400]},roundHits:[9999,6000,3000,1000],myTotal:1000,maxCombo:111}});
+ h.hit();assert.equal(h.run('endingActive'),false);assert.equal(h.run('roundHits[0]'),10000);assert.equal(h.elements.get('rage').textContent,'100%');
+ h.hit();assert.equal(h.run('endingActive'),true);assert.equal(h.elements.get('ending').hidden,false);
+ const before=h.run('JSON.stringify({daily:store.daily,monthly:store.monthly,yearly:store.yearly,pending})');
+ const total=h.run('store.myTotal');h.hit();assert.equal(h.run('store.myTotal'),total);
+ [...h.timers.values()].find(t=>t.ms===4200).f();assert.ok(h.elements.get('ending').className.includes('blackout'));
+ [...h.timers.values()].find(t=>t.ms===6000).f();
+ assert.equal(h.run('endingActive'),false);assert.equal(h.elements.get('ending').hidden,true);
+ assert.equal(h.run('roundHits.every(n=>n===0)'),true);assert.equal(h.run('store.myTotal'),0);assert.equal(h.run('maxCombo'),0);assert.equal(h.run('combo'),0);
+ assert.equal(h.run('JSON.stringify({daily:store.daily,monthly:store.monthly,yearly:store.yearly,pending})'),before);
+ assert.equal(h.elements.get('rage').textContent,'0%');assert.equal(h.elements.get('main').inert,undefined);
+ h.hit();assert.equal(h.run('roundHits[0]'),1);
+ assert.equal(h.elements.get('stageWrap').querySelectorAll('.banner').length,0);
 });

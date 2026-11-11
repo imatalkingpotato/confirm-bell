@@ -17,39 +17,7 @@ const PEOPLE = [
   { avatar:'initial', lines:['덱으로 볼게요','1번이요~'], name:'지영', hair:'#171310', hairStyle:'tied', top:'#d9c47f' },
 ];
 const COMMON_LINES = ['보고 있습니다.','방금 보려고 했는데요.','TF 다녀올게요','에디터님들 의견 받아봐 주세요','이렇게 급한 건은 댓글 말고 슬랙으로 주세요','마음은 이미 컨펌했어요.','컨펌 완료. 망치 내려놓으세요.','이 망치도 컨펌받은 건가요?'];
-const STAGE_NAMES = ['컨펌 대기','눈가 멍','어깨 밴드','머리 붕대','볼 밴드','팔 붕대','목발 등장','다리 깁스','수액 연결','휠체어 출근','병상 컨펌'];
-const RARE = ['덱으로 볼게요!','앗 미팅이 많아 지금 보겠습니다','4시에 볼게요~','오늘까지 컨펌해두겠습니다','지금 바로 확인할게요!'];
-const MILESTONES = {
-  10:'어셋/카피/썸네일 컨펌 부탁드립니다 🙏',
-  20:'컨펌 리마인드 드립니다 (벌써 2회차)',
-  30:'덱에 핑 드렸습니다. 보셨죠? 보고 안 누르신 거죠?',
-  50:'읽씹은 아니시죠? 아니라고 해주세요',
-  70:'슬랙 1, 댓글 2, 덱 1. 지금 저만 세고 있나요?',
-  100:'괜찮아요. 기다리는 게 저희 일이니까요. 아마도요.',
-  150:'어셋이 오늘도 컨펌을 기다립니다. 어셋도 지쳤대요.',
-  200:'혹시 미팅이 하루 24시간이세요?',
-  250:'"확인해볼게요"의 "확인"은 어떤 의미셨을까요',
-  300:'괜찮습니다. 어차피 오늘도 야근이었어요.',
-  350:'말풍선 답장은 참 빠르시던데요. 인스타 스토리도요.',
-  400:'컨펌 안 해주셔도 돼요. 대신 업로드도 없는 거예요.',
-  450:'지금 보신다고요? 그 말 3시간 전에도 하셨어요.',
-  500:'반환점입니다. 컨펌은 아직도 없네요.',
-  600:'저희 팀 상태메시지 바꿨어요. "컨펌 대기 중"으로.',
-  700:'이쯤이면 컨펌이 아니라 기적을 기다리는 중입니다.',
-  800:'이 기록, 내년 위클리 첫 장에 넣겠습니다.',
-  900:'괜찮아요. 울지 않아요. 프로니까요.',
-  1000:'컨펌 대기 1차 폭발',
-  2000:'덱이 흔들리는 중',
-  3000:'리마인드의 한계를 돌파했다',
-  4000:'사무실 최종 보스',
-  5000:'컨펌의 신 · 전설 달성',
-  6000:'목발 짚고도 컨펌 대기',
-  7000:'깁스보다 단단한 컨펌 의지',
-  8000:'수액은 들어가는데 컨펌은 안 나와요',
-  9000:'휠체어 타고 덱으로 갑니다',
-  10000:'병상에서도 컨펌은 계속된다'
-};
-
+const STAGE_NAMES = ['컨펌 대기','눈가 멍','어깨 붕대','머리 붕대','볼 밴드','팔 깁스·슬링','목발 등장','다리 깁스','수액 연결','휠체어 출근','병상 컨펌'];
 // ================= 상태 & 저장 =================
 // 수치는 일/월/연 "버킷"에 저장 → 00시·월초·연초에 자동으로 새 버킷 시작(리셋),
 // 지난 버킷은 지우지 않으므로 그대로 아카이브가 된다.
@@ -76,7 +44,7 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let motionOn = !reducedMotion, sfxOn = true;
 let debris = [], hitGate = -Infinity;
 const lineCursor = [0,0,0,0], commonCursor = [0,0,0,0], speechTurn = [0,0,0,0];
-let celebrating = false;
+let endingActive = false;
 
 try {
   const saved = PREVIEW ? null : JSON.parse(localStorage.getItem(LS_KEY));
@@ -84,7 +52,9 @@ try {
 } catch(e){}
 // Personal lifetime totals come from the existing yearly archives, not the combo.
 const lifetimeHits = PEOPLE.map((_,i)=>Object.values(store.yearly).reduce((n,year)=>n+(Number(year[i])||0),0));
-function injuryLevel(index){ return Math.min(10,Math.floor(lifetimeHits[index]/1000)); }
+const roundHits = PEOPLE.map((_,i)=>Math.min(10000,Math.max(0,Number(store.roundHits?.[i] ?? lifetimeHits[i])||0)));
+store.roundHits=roundHits;
+function injuryLevel(index){ return Math.min(10,Math.floor(roundHits[index]/1000)); }
 function save(){
   if(PREVIEW) return;
   store.maxCombo = maxCombo;
@@ -158,17 +128,27 @@ function drawInjuries(hx,hy,level){
   if(level>=1){ // Purple eye bruise, kept clear of the centered J glyph.
     px(hx,hy+7,5,5,'#86509b');px(hx+1,hy+8,3,3,'#58366d');px(hx+2,hy+9,2,1,'#c597ce');
   }
-  if(level>=2){ // Shoulder plaster remains visible above the laptop.
-    px(hx-3,hy+17,11,4,'#f4c69d');px(hx+1,hy+17,4,4,'#d9a57d');px(hx-2,hy+19,1,1,'#bd8969');px(hx+6,hy+19,1,1,'#bd8969');
-  }
   if(level>=3){
     px(hx-3,hy-1,22,5,'#fff3e6');px(hx-3,hy+1,22,1,'#c9c0bc');px(hx+17,hy+2,4,3,'#e8ddd5');px(hx+19,hy+5,2,7,'#fff3e6');
   }
   if(level>=4){
     px(hx+10,hy+12,7,4,'#f2bc91');px(hx+12,hy+12,3,4,'#c58f6b');px(hx+11,hy+13,1,1,'#ffe6c8');
   }
+
+}
+function drawBodyBandages(hx,hy,level){
+  // Foreground wraps sit outside the laptop silhouette, with visible layers.
+  if(level>=2){
+    px(hx-13,hy+16,14,15,'#978c94');px(hx-12,hy+16,13,13,'#fff8e9');
+    for(let y=hy+19;y<hy+29;y+=3)px(hx-12,y,13,1,'#c1b9b2');
+    px(hx-9,hy+17,3,11,'#e3dcd2');px(hx-8,hy+20,2,3,'#e58f93');
+  }
   if(level>=5){
-    px(hx+27,hy+24,6,13,'#f7ece2');px(hx+27,hy+27,6,1,'#bdb2aa');px(hx+27,hy+31,6,1,'#bdb2aa');px(hx+27,hy+35,6,1,'#bdb2aa');
+    // Thick arm cast plus a diagonal sling; no longer a small white rectangle.
+    ctx.strokeStyle='#ddd7cc';ctx.lineWidth=S*2;ctx.beginPath();ctx.moveTo((hx+7)*S,(hy+17)*S);ctx.lineTo((hx+31)*S,(hy+31)*S);ctx.stroke();
+    px(hx+24,hy+20,13,15,'#8e8790');px(hx+24,hy+19,12,15,'#fff8ed');
+    for(let y=hy+22;y<hy+34;y+=3)px(hx+24,y,12,1,'#bdb7b0');
+    px(hx+25,hy+31,14,4,'#eee4da');px(hx+35,hy+30,4,3,'#e6b88f');
   }
 }
 function drawCrutches(){
@@ -227,23 +207,53 @@ function drawHospitalBed(p){
   [[8,21],[11,21],[13,18],[15,23],[17,17],[19,21],[22,21]].forEach(([x,y],i)=>i?ctx.lineTo(x*S,y*S):ctx.moveTo(x*S,y*S));ctx.stroke();
 }
 function impactPoint(){return injuryLevel(cur)>=10?{x:34,y:44}:{x:71,y:32};}
-function drawRearHammer(){
-  if(anim.age>=.42)return;
-  const contact=impactPoint(),age=anim.age;
-  const pivot={x:contact.x+33,y:contact.y-18};
-  const angle=age<.065?-.5:age<.21?-.5+(age-.065)*4.3:.124-(age-.21)*8;
-  const heavy=anim.power>=3;
-  if(motionOn&&age<.23){
-    for(let i=4;i>=1;i--){ctx.save();ctx.globalAlpha=.04*(5-i);ctx.translate(pivot.x*S,pivot.y*S);ctx.rotate(angle-i*.34);px(-49,-8,24,16,'#cd2541');px(-35,-2,35,4,'#bc8969');ctx.restore();}
-    ctx.strokeStyle='#e95b68';ctx.lineWidth=S*.7;ctx.globalAlpha=.65*(1-age/.23);
-    ctx.beginPath();ctx.arc(pivot.x*S,pivot.y*S,37*S,Math.PI+angle-1.4,Math.PI+angle);ctx.stroke();ctx.globalAlpha=1;
+function hammerPose(age){
+  const ease=t=>t*t*(3-2*t);
+  if(age<.10){const t=ease(Math.max(0,age)/.10);return {x:118-47*t,y:16+16*t,z:95-95*t,yaw:-1.1+1.3*t,roll:-.4+.25*t,front:false};}
+  if(age<.28){const t=ease((age-.10)/.18);return {x:71-46*t,y:32+16*t,z:-58*t,yaw:.2+1.3*t,roll:-.15+.65*t,front:true};}
+  const t=ease(Math.min(1,(age-.28)/.16));return {x:25-52*t,y:48+11*t,z:-58+35*t,yaw:1.5+.6*t,roll:.5+.5*t,front:true};
+}
+function projectHammer(x,y,z){const scale=170/(170+z);return {x:(64+(x-64)*scale)*S,y:(44+(y-44)*scale)*S,scale};}
+function drawHammer(front){
+  if(anim.age>=.44)return;
+  const pose=hammerPose(anim.age),contact=impactPoint();
+  if(pose.front!==front)return;
+  const dx=contact.x-71,dy=contact.y-32;
+  function head(p,alpha=1){
+    ctx.save();ctx.globalAlpha=alpha;
+    const size=anim.power>=3?1.25:1;
+    const roll=Math.atan2(8-p.y,112-p.x)-Math.PI/2;
+    const verts=[],faces=[];
+    function vertex(x,y,z){
+      const rx=x*Math.cos(p.yaw)+z*Math.sin(p.yaw),rz=-x*Math.sin(p.yaw)+z*Math.cos(p.yaw);
+      const xx=(rx*Math.cos(roll)-y*Math.sin(roll))*size;
+      const yy=(rx*Math.sin(roll)+y*Math.cos(roll))*size;
+      const point=projectHammer(p.x+dx+xx,p.y+dy+yy,p.z+rz*size);
+      verts.push({...point,z:p.z+rz*size});return verts.length-1;
+    }
+    function prism(points,z1,z2,colors){
+      const a=points.map(([x,y])=>vertex(x,y,z1)),b=points.map(([x,y])=>vertex(x,y,z2));
+      faces.push({v:a,c:colors[0]},{v:b,c:colors[1]});
+      for(let i=0;i<a.length;i++){const j=(i+1)%a.length;faces.push({v:[a[i],a[j],b[j],b[i]],c:colors[2+i%2]});}
+    }
+    // Forged steel center, a flat striking face and two separated curved claws.
+    prism([[-9,-5],[7,-5],[10,-3],[9,3],[5,5],[-9,5]],-4,4,['#c4ccd2','#63717f','#f3f7fa','#929fa9']);
+    prism([[-16,-6],[-10,-6],[-9,-4],[-9,4],[-10,6],[-16,6]],-5,5,['#eef3f7','#748492','#fff','#aab8c3']);
+    for(const [z1,z2] of [[-5,-1.5],[1.5,5]]){
+      prism([[5,-5],[12,-5],[19,-1],[22,5],[18,3],[12,0],[7,1]],z1,z2,['#b8c3cd','#586775','#e9f2f8','#8b9aa8']);
+    }
+    faces.sort((a,b)=>b.v.reduce((n,i)=>n+verts[i].z,0)/b.v.length-a.v.reduce((n,i)=>n+verts[i].z,0)/a.v.length);
+    for(const face of faces){ctx.fillStyle=face.c;ctx.strokeStyle='#394553';ctx.lineWidth=S*.35;ctx.beginPath();face.v.forEach((v,i)=>{const q=verts[v];if(i)ctx.lineTo(q.x,q.y);else ctx.moveTo(q.x,q.y);});ctx.closePath();ctx.fill();ctx.stroke();}
+    ctx.restore();
   }
-  ctx.save();ctx.translate(pivot.x*S,pivot.y*S);ctx.rotate(angle);
-  px(-39,-2,42,5,'#804032');px(-39,-2,42,1,'#cf9c6c');
-  for(let x=-17;x<0;x+=4)px(x,-2,2,5,'#242230');px(-3,-4,8,9,'#eac39f');
-  ctx.translate(-37*S,0);ctx.scale(heavy?1.35:1,heavy?1.35:1);
-  px(-13,-8,26,16,'#b71d37');px(-15,-9,5,18,'#461527');px(10,-9,5,18,'#461527');
-  px(-10,-7,20,3,'#ed5362');px(-10,5,20,3,'#71182e');px(-8,-2,3,5,'#e8a461');px(5,-2,3,5,'#e8a461');ctx.restore();
+  const center=projectHammer(pose.x+dx,pose.y+dy,pose.z);
+  const hand=projectHammer(112+dx,8+dy,35);
+  if(motionOn&&anim.age>.025){for(let i=3;i>=1;i--)head(hammerPose(Math.max(0,anim.age-i*.025)),.05*(4-i));}
+  ctx.save();
+  ctx.strokeStyle='#62402c';ctx.lineWidth=5*S*Math.max(.65,center.scale);ctx.beginPath();ctx.moveTo(hand.x,hand.y);ctx.lineTo(center.x,center.y);ctx.stroke();
+  ctx.strokeStyle='#e2b276';ctx.lineWidth=2*S;ctx.beginPath();ctx.moveTo(hand.x-2,hand.y-2);ctx.lineTo(center.x-2,center.y-2);ctx.stroke();
+  ctx.fillStyle='#edc4a3';ctx.fillRect(hand.x-4*S,hand.y-4*S,8*S,8*S);ctx.restore();
+  head(pose);
 }
 
 function drawScene(){
@@ -267,9 +277,9 @@ function drawScene(){
   if(level>=10){
     px(0,0,128,64,'#c7dfe0');px(0,64,128,24,'#829fae');
     px(95,4,27,5,'#edf6f5');
-    drawRearHammer();drawHospitalBed(p);
+    drawHammer(false);drawHospitalBed(p);
   } else {
-  drawRearHammer();
+  drawHammer(false);
   // 이슬: the orange silhouette from the supplied reference, built on the same pixel grid.
   if(p.avatar==='orange'){
     pixelDisc(hx+8,hy+7+dip,10,'#e99024');
@@ -360,6 +370,7 @@ function drawScene(){
   px(21,58,13,3,'#f4e7d9'); px(24,56,12,2,'#c8c1d8'); px(95,56,6,5,'#eea454');
   ctx.restore();
   } else {drawWheelchair();}
+  drawBodyBandages(hx,hy,level);
   if(level>=6)drawCrutches();
   if(level>=7&&level<9){
     px(73,68,10,13,'#f2ece4');
@@ -368,6 +379,7 @@ function drawScene(){
   }
   if(level>=8)drawIV();
   }
+  drawHammer(true);
   const contact=impactPoint();
   if(anim.shock>0){
     const spread=(1-anim.shock)*13;
@@ -490,25 +502,41 @@ function startFireworks(ms){
 }
 
 // ================= 레어 이벤트: 컨펌 빵빠레 =================
-function celebrate(quote){
-  celebrating=true;
-  clearTimeout(comboTimer);
-  fanfare();
-  startFireworks(4200);
-  const d=document.createElement('div');
-  d.className='celebrate';
-  d.innerHTML=`<div class="c-title">🎊 컨펌 떴다!!! 🎊</div>
-    <div class="c-quote">"${quote}"</div>
-    <div class="c-sub">— ${PEOPLE[cur].name}님 · 이 순간을 캡처하세요 📸 (목격자: 나)</div>`;
-  wrap.appendChild(d);
-  setTimeout(()=>{
-    d.remove(); celebrating=false;
-    comboTimer=setTimeout(()=>{combo=0; updateHud();},1300);
-  }, 4400);
-}
-
-// ================= 게임 로직 =================
 const wrap=document.getElementById('stageWrap');
+let endingTimers=[], endingInert=[];
+function resetRound(){
+  roundHits.fill(0);combo=0;maxCombo=0;store.myTotal=0;store.maxCombo=0;cur=0;
+  clearTimeout(comboTimer);clearTimeout(bubbleT);
+  if(bubbleEl){bubbleEl.remove();bubbleEl=null;}
+  wrap.querySelectorAll('.float-text').forEach(el=>el.remove());
+  lineCursor.fill(0);commonCursor.fill(0);speechTurn.fill(0);
+  debris=[];fxParts=[];fxUntil=0;fx.clearRect(0,0,640,440);
+  anim={hammer:0,bonk:0,frown:0,sweat:0,age:1,power:1,shake:0,freeze:0,shock:0,desk:0};
+  hitGate=performance.now();
+  document.querySelectorAll('.tab').forEach((tab,i)=>tab.classList.toggle('on',i===0));
+  $('impactBadge').classList.remove('active');
+  save();updateHud();
+}
+function finishEnding(){
+  if(!endingActive)return;
+  endingTimers.forEach(clearTimeout);endingTimers=[];
+  resetRound();
+  const panel=$('ending');panel.hidden=true;panel.classList.remove('playing','blackout');
+  [document.querySelector('main'),$('musicCard')].forEach((el,i)=>{el.inert=endingInert[i];});
+  document.documentElement.classList.remove('ending-open');
+  endingActive=false;$('btn').focus({preventScroll:true});
+}
+function beginEnding(){
+  if(endingActive)return;
+  endingActive=true;clearTimeout(comboTimer);clearTimeout(bubbleT);
+  if(bubbleEl){bubbleEl.remove();bubbleEl=null;}
+  const panel=$('ending');
+  endingInert=[document.querySelector('main'),$('musicCard')].map(el=>{const value=el.inert;el.inert=true;return value;});
+  document.documentElement.classList.add('ending-open');
+  panel.hidden=false;panel.classList.add('playing');panel.focus({preventScroll:true});
+  endingTimers.push(setTimeout(()=>panel.classList.add('blackout'),4200));
+  endingTimers.push(setTimeout(finishEnding,6000));
+}
 function impact(power){
   anim.bonk=1; anim.frown=.6; anim.shock=1; anim.desk=1;
   anim.shake=motionOn ? 1 : 0; anim.freeze=motionOn ? (power>=3?.045:.018) : 0;
@@ -525,11 +553,12 @@ function impact(power){
   }
 }
 function hit(){
-  if(celebrating || window.confirmBellIntroActive || GALLERY) return;
+  if(endingActive || window.confirmBellIntroActive || GALLERY) return;
   const now=performance.now(); if(now-hitGate<45) return; hitGate=now;
   const p=PEOPLE[cur]; checkRollover();
   bucket(store.daily,K.day)[cur]++; bucket(store.monthly,K.mon)[cur]++; bucket(store.yearly,K.year)[cur]++;
-  store.myTotal++; lifetimeHits[cur]++; if(sharedOn) pending[cur]++;
+  store.myTotal++; lifetimeHits[cur]++; roundHits[cur]++; if(sharedOn) pending[cur]++;
+  if(roundHits[cur]>10000){ roundHits[cur]=10000; save(); beginEnding(); return; }
   combo++; maxCombo=Math.max(maxCombo,combo);
   const heavy=combo%50===0, critical=combo%10===0;
   const power=heavy?3.5:critical?2:1;
@@ -549,15 +578,7 @@ function hit(){
     const personal=speechTurn[cur]++ % 2 === 0;
     speak(personal ? p.lines[lineCursor[cur]++ % p.lines.length] : COMMON_LINES[commonCursor[cur]++ % COMMON_LINES.length]);
   }
-  if(MILESTONES[combo]){
-    banner(MILESTONES[combo],combo>=1000?combo:0);
-    if(combo>=1000){fanfare(); startFireworks(2400);}
-  } else if(!PREVIEW && Math.random()<.001){
-    updateHud(); celebrate(RARE[Math.floor(Math.random()*RARE.length)]);return;
-  }
-  if(lifetimeHits[cur]%1000===0 && lifetimeHits[cur]<=10000 && !MILESTONES[combo]){
-    banner(`${p.name}님 누적 ${lifetimeHits[cur].toLocaleString()}타 · ${STAGE_NAMES[injuryLevel(cur)]}`);
-  }
+  if(combo>=1000 && combo<=10000 && combo%1000===0){fanfare();startFireworks(2400);}
   updateHud();
 }
 function spawnFloat(txt,x,y){
@@ -578,15 +599,6 @@ function speak(txt,isMe){
   clearTimeout(bubbleT);
   bubbleT=setTimeout(()=>{bubbleEl&&bubbleEl.remove(); bubbleEl=null;}, 2200);
 }
-let bannerEl=null, bannerTimer=null;
-function banner(txt,milestone=0){
-  if(bannerEl) bannerEl.remove();clearTimeout(bannerTimer);
-  const d=document.createElement('div'); d.className='banner'+(milestone?' milestone':'');
-  if(milestone){const count=document.createElement('strong');count.textContent=milestone.toLocaleString()+' COMBO';d.appendChild(count);}
-  d.appendChild(document.createTextNode(txt));wrap.appendChild(d);bannerEl=d;
-  bannerTimer=setTimeout(()=>{d.remove();if(bannerEl===d) bannerEl=null;},milestone?2800:1750);
-}
-
 // ================= HUD & 리더보드 =================
 const $=id=>document.getElementById(id);
 function boardHtml(counts){
@@ -601,11 +613,11 @@ function boardHtml(counts){
 function updateHud(){
   $('combo').textContent=combo;
   $('maxCombo').textContent=maxCombo;
-  const rage=combo>0 && combo%50===0 ? 100 : combo%50*2;
+  const rage=Math.min(100,Math.floor(roundHits[cur]/100));
   $('rage').textContent=rage+'%';$('rageFill').style.width=rage+'%';$('rageMeter').setAttribute('aria-valuenow',String(rage));
   $('btn').classList.toggle('fury',rage>=80);
-  $('rage').textContent=rage===100?'풀스윙!':rage+'%';
-  $('targetLabel').textContent=PEOPLE[cur].name+'님 · 누적 '+lifetimeHits[cur].toLocaleString()+'타';
+
+  $('targetLabel').textContent=PEOPLE[cur].name+'님 · 이번 판 '+roundHits[cur].toLocaleString()+' / 10,000타';
   const add=(a,b)=>a.map((v,i)=>v+b[i]);
   const cD = sharedOn ? add(shared.daily  ||[0,0,0,0], pending) : bucket(store.daily,K.day).slice();
   const cM = sharedOn ? add(shared.monthly||[0,0,0,0], pending) : bucket(store.monthly,K.mon).slice();
@@ -640,13 +652,13 @@ PEOPLE.forEach((p,i)=>{
   const b=document.createElement('button'); b.className='tab'+(i===0?' on':'');
   b.appendChild(avatarCanvas(p));
   b.appendChild(document.createTextNode(p.name+'님'));
-  b.onclick=()=>{ clearTimeout(comboTimer);cur=i;combo=0;anim.age=1;anim.bonk=0;anim.frown=0;anim.shock=0;anim.shake=0;anim.desk=0;anim.freeze=0;debris=[]; document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('on',j===i)); updateHud(); speak('…네? 저요?'); };
+  b.onclick=()=>{ if(endingActive)return;clearTimeout(comboTimer);cur=i;combo=0;anim.age=1;anim.bonk=0;anim.frown=0;anim.shock=0;anim.shake=0;anim.desk=0;anim.freeze=0;debris=[]; document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('on',j===i)); updateHud(); speak('…네? 저요?'); };
   tabs.appendChild(b);
 });
 
 // ================= 입력 =================
 document.addEventListener('keydown',e=>{
-  if(window.confirmBellIntroActive || GALLERY) return;
+  if(window.confirmBellIntroActive || GALLERY || endingActive) return;
   const tag=e.target.tagName;
   if(['INPUT','TEXTAREA','SELECT'].includes(tag) || e.target.isContentEditable) return;
   if(e.code==='Space' && (!['BUTTON','A'].includes(tag) || e.target.id==='btn')){e.preventDefault();hit();}
@@ -655,6 +667,12 @@ document.addEventListener('keydown',e=>{
 cv.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();hit();});
 // Native click preserves keyboard activation and avoids counting touch twice.
 $('btn').addEventListener('click',hit);
+$('endingRestart').addEventListener('click',finishEnding);
+document.addEventListener('keydown',event=>{
+  if(!endingActive)return;
+  if(event.key==='Tab'){event.preventDefault();$('endingRestart').focus();}
+  if(event.key==='Escape'){event.preventDefault();finishEnding();}
+});
 $('sfxToggle').addEventListener('click',()=>{sfxOn=!sfxOn;$('sfxToggle').textContent=sfxOn?'🔊 타격음 ON':'🔇 타격음 OFF';$('sfxToggle').setAttribute('aria-pressed',String(sfxOn));});
 function renderMotion(){ $('motionToggle').textContent=motionOn?'화면 흔들림 ON':'화면 흔들림 OFF';$('motionToggle').setAttribute('aria-pressed',String(motionOn)); }
 $('motionToggle').addEventListener('click',()=>{motionOn=!motionOn;renderMotion();});

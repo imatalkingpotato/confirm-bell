@@ -256,3 +256,17 @@ h1 { font-size:38px; margin:10px 0 6px; }
 .stage-gallery .gallery-note { margin-top:14px; }
 .stage-gallery>a { color:#f1b0d9; display:inline-block; font-size:12px; margin-top:10px; }
 @media(max-width:800px) { .stage-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .stage-gallery { padding:0; } .stage-gallery h1 { font-size:22px; } }
+
+.ending[hidden] { display:none; }
+.ending-open, .ending-open body { overflow:hidden; }
+.ending { position:fixed; inset:0; z-index:1100; height:100dvh; background:#08080bef; display:grid; place-items:center; padding:30px 20px; outline:0; }
+.ending-content { width:min(620px,95vw); text-align:center; }
+.ending h2 { color:#fff; font:700 clamp(20px,3vw,34px)/1.7 'Galmuri11',monospace; word-break:keep-all; text-shadow:0 3px 0 #630b24; margin-bottom:26px; opacity:0; }
+.ending img { display:block; width:100%; height:auto; max-height:65vh; object-fit:contain; opacity:0; }
+.ending.playing h2 { animation:intro-fade .7s ease both; }
+.ending.playing img { animation:death-image 1.4s .8s ease both; }
+@keyframes death-image { from { opacity:0; transform:scale(.94); } to { opacity:1; transform:scale(1); } }
+.ending-black { position:absolute; inset:0; background:#000; pointer-events:none; opacity:0; }
+.ending.blackout .ending-black { animation:intro-fade 1s ease both; }
+#endingRestart { position:absolute; right:22px; bottom:max(22px,env(safe-area-inset-bottom)); border:1px solid #ffffff30; border-radius:99px; background:#121219; color:#aaa; padding:10px 15px; font:11px sans-serif; cursor:pointer; }
+.ending.blackout #endingRestart { opacity:0; }

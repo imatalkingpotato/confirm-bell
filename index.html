@@ -13,6 +13,11 @@
 <script src="gallery.js" defer></script>
 </head>
 <body>
+  <section id="ending" class="ending" role="dialog" aria-modal="true" aria-labelledby="endingTitle" tabindex="-1" hidden>
+    <div class="ending-content"><h2 id="endingTitle">컨펌을 기다리다 사망했습니다</h2><img src="assets/ending/confirmation-death.jpg" alt="사망이라고 적힌 흑백 애니메이션 짤"></div>
+    <div class="ending-black" aria-hidden="true"></div>
+    <button id="endingRestart" type="button">새 판 시작 ↗</button>
+  </section>
   <section id="intro" class="intro" role="dialog" aria-modal="true" aria-label="컨펌벨 오프닝" hidden>
     <div id="introCollage" class="intro-collage" aria-hidden="true"></div>
     <div class="intro-veil" aria-hidden="true"></div>
@@ -42,7 +47,7 @@
     <header class="game-heading"><span class="eyebrow">THE CONFIRMATION ARCADE</span><h1>🔨 컨펌벨</h1><span class="edition">HARD HIT EDITION</span></header>
     <div class="tabs" id="tabs" aria-label="담당자 선택"></div>
     <div class="stage-wrap" id="stageWrap">
-      <canvas id="stage" width="640" height="440" role="img" aria-label="뿅망치로 컨펌을 재촉하는 픽셀 사무실"></canvas>
+      <canvas id="stage" width="640" height="440" role="img" aria-label="망치로 컨펌을 재촉하는 픽셀 사무실"></canvas>
       <canvas id="fx" width="640" height="440" aria-hidden="true"></canvas>
       <div class="stage-tag"><span class="live-dot"></span><span id="targetLabel">이슬님 · 컨펌 대기 중</span></div>
       <div class="impact-badge" id="impactBadge" aria-hidden="true">CRITICAL!</div>
@@ -50,11 +55,11 @@
     <div class="hud">
       <div class="box">현재 콤보<strong class="num combo-num" id="combo">0</strong></div>
       <div class="box">최대 콤보<strong class="num" id="maxCombo">0</strong></div>
-      <div class="box rage-box">풀스윙 충전<strong class="num" id="rage">0%</strong><div class="rage-track" role="progressbar" aria-label="풀스윙 충전" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="rageMeter"><span id="rageFill"></span></div></div>
+      <div class="box rage-box">분노 게이지<strong class="num" id="rage">0%</strong><div class="rage-track" role="progressbar" aria-label="분노 게이지" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="rageMeter"><span id="rageFill"></span></div></div>
     </div>
     <button id="btn" type="button">🔨 컨펌 플리즈!</button>
     <div class="controls"><button id="sfxToggle" type="button" aria-pressed="true">🔊 타격음 ON</button><button id="motionToggle" type="button" aria-pressed="true">화면 흔들림 ON</button><button id="introReplay" type="button">✧ 인트로 다시 보기</button></div>
-    <p class="hint">클릭 · 터치 · 스페이스바로 타격 · 숫자키 1~4로 담당자 변경<br>50콤보마다 풀스윙 · 누적 1,000타마다 상태 변화 · 10,000타에 병원 침대</p>
+    <p class="hint">클릭 · 터치 · 스페이스바로 타격 · 숫자키 1~4로 담당자 변경<br>10,000타 = 분노 100% · 그다음 한 대는…</p>
     <div class="boards">
       <section class="board"><h2>📊 오늘의 리더보드</h2><div class="mode" id="boardMode">개인 기록 (이 브라우저에 저장됨)</div><div id="boardToday"></div></section>
       <section class="board"><h2>🗓 이번 달 리더보드</h2><div id="boardMonth"></div><div class="yearline" id="yearLine"></div></section>

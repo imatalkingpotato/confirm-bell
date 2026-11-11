@@ -8,10 +8,11 @@
   const collage = document.getElementById('introCollage');
   const skip = document.getElementById('introSkip');
   const replay = document.getElementById('introReplay');
+  const entry=document.getElementById('entry'),entryButton=document.getElementById('entryButton'),entryStatus=document.getElementById('entryStatus');
   const surfaces = [document.querySelector('main'), document.getElementById('musicCard')];
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const day = () => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-  let seen = '', timer, generation = 0, previousFocus, previousInert = [];
+  let seen = '', timer, previousFocus, previousInert = [];
   try { if (!preview) seen = localStorage.getItem(KEY) || ''; } catch (_) {}
   // Deliberately irregular overlapping positions; portrait has its own coverage.
   const poses = [
@@ -31,12 +32,10 @@
   });
   function finish() {
     if (overlay.hidden) return;
-    const wasRunning=overlay.classList.contains('running');
-    ++generation; clearTimeout(timer);
+    clearTimeout(timer);
     overlay.hidden = true; overlay.classList.remove('running','leaving');
     document.documentElement.classList.remove('intro-open');
     window.confirmBellIntroActive = false;
-    if(!wasRunning)window.confirmBellMusic?.start();
     surfaces.forEach((el,i) => { el.inert = previousInert[i]; });
     seen = day();
     if (!preview) { try { localStorage.setItem(KEY,seen); } catch (_) {} }
@@ -45,36 +44,57 @@
   }
   function start() {
     if (window.confirmBellIntroActive) return;
-    const run = ++generation;
-    previousFocus = document.activeElement;
+    previousFocus = document.activeElement===entryButton?document.getElementById('btn'):document.activeElement;
     previousInert = surfaces.map(el=>el.inert);
     surfaces.forEach(el=>{el.inert=true;});
     window.confirmBellIntroActive = true;
     document.documentElement.classList.add('intro-open');
     overlay.hidden = false; overlay.classList.toggle('reduced',reduced);
     skip.focus({preventScroll:true});
-    // A bounded preload prevents broken/missing images from trapping the visitor.
-    const loaded = [...collage.children].map(img=>img.decode?.().catch(()=>{}) || Promise.resolve());
-    loaded.push(window.confirmBellMusic?.prepared || Promise.resolve());
-    let loadTimer;
-    Promise.race([Promise.all(loaded),new Promise(resolve=>{loadTimer=setTimeout(resolve,1200);})]).then(()=>{
-      clearTimeout(loadTimer);
-      if (run !== generation || overlay.hidden) return;
-      overlay.classList.add('running');
-      window.confirmBellMusic?.start(true);
-      timer = setTimeout(()=>{
-        overlay.classList.add('leaving');
-        timer = setTimeout(finish,reduced?200:1100);
-      },reduced?4500:10100);
-    });
+    // Invoke playback inside the actual entry/replay click, before any async work.
+    window.confirmBellMusic?.start(true);
+    overlay.classList.add('running');
+    timer = setTimeout(()=>{
+      overlay.classList.add('leaving');
+      timer = setTimeout(finish,reduced?200:1100);
+    },reduced?4500:10100);
   }
   skip.addEventListener('click',finish);
   replay.addEventListener('click',start);
   document.addEventListener('keydown',event=>{
+    if(!entry.hidden){
+      if(event.key==='Tab'){event.preventDefault();entryButton.focus();}
+      return;
+    }
     if (!window.confirmBellIntroActive) return;
     if (event.key === 'Escape') { event.preventDefault(); finish(); }
     if (event.key === 'Tab') { event.preventDefault(); skip.focus(); }
   });
-  if (query.get('intro') === '1' || seen !== day()) start();
-  else window.confirmBellMusic?.start();
+  // Every visit gets one explicit music gesture; the collage remains once per KST day.
+  const entryInert=surfaces.map(el=>el.inert);
+  surfaces.forEach(el=>{el.inert=true;});
+  window.confirmBellIntroActive=true;
+  entry.hidden=false;document.documentElement.classList.add('intro-open');
+  const loaded=[...collage.children].map(img=>img.decode?.().catch(()=>{}) || Promise.resolve());
+  loaded.push(window.confirmBellMusic?.prepared || Promise.resolve());
+  let preparationTimer;
+  Promise.race([Promise.all(loaded),new Promise(resolve=>{preparationTimer=setTimeout(resolve,6000);})]).then(()=>{
+    clearTimeout(preparationTimer);
+    if(entry.hidden)return;
+    entryButton.disabled=false;
+    entryStatus.textContent=window.confirmBellMusic?.available?'':'음악 연결이 늦어지고 있어요. 먼저 입장할 수 있어요.';
+    entryButton.focus({preventScroll:true});
+  });
+  entryButton.addEventListener('click',()=>{
+    if(entryButton.disabled||entry.hidden)return;
+    entry.hidden=true;clearTimeout(preparationTimer);
+    surfaces.forEach((el,i)=>{el.inert=entryInert[i];});
+    window.confirmBellIntroActive=false;
+    if(query.get('intro')==='1'||seen!==day())start();
+    else{
+      document.documentElement.classList.remove('intro-open');
+      window.confirmBellMusic?.start();
+      document.getElementById('btn').focus({preventScroll:true});
+    }
+  });
 })();

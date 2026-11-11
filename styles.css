@@ -206,7 +206,18 @@ h1 { font-size:38px; margin:10px 0 6px; }
 }
 
 /* Daily opening: full-bleed, irregular deck collage → pink lettering → whiteout. */
-.intro[hidden] { display:none; }
+.entry[hidden],.intro[hidden] { display:none; }
+.entry { position:fixed; inset:0; z-index:1001; min-height:100dvh; overflow:auto; display:grid; place-items:center; padding:32px 20px; background:radial-gradient(ellipse at 50% 35%,#58354f 0%,#261c33 44%,#14101d 100%); }
+.entry:before { content:''; position:absolute; inset:0; pointer-events:none; opacity:.15; background:repeating-linear-gradient(0deg,transparent 0 3px,#000 3px 4px); }
+.entry-content { position:relative; text-align:center; width:min(100%,520px); padding:32px 0; }
+.entry-mark { font-size:64px; margin-bottom:24px; filter:drop-shadow(0 8px 20px #0006); transform:rotate(-12deg); }
+.entry h2 { font-size:clamp(42px,10vw,70px); line-height:1.2; margin:0; color:#ffdc85; text-shadow:3px 3px #b84a5d,6px 6px #381626; }
+.entry-copy { margin:26px 0 36px; color:#e2d2dd; font:14px/1.8 sans-serif; word-break:keep-all; }
+.entry button { width:min(100%,300px); min-height:62px; padding:16px 28px; background:#e84b67; color:#fff8ee; font:inherit; font-size:22px; border:2px solid #ffbdad; border-radius:8px; box-shadow:0 6px 0 #8c293d,0 10px 34px #ed446735; cursor:pointer; transition:transform .15s,background .15s; }
+.entry button:hover { background:#f05d77; }
+.entry button:active { transform:translateY(4px); box-shadow:0 2px 0 #8c293d; }
+.entry button:disabled { opacity:.45; cursor:wait; }
+.entry-status { min-height:36px; margin:22px 0 0; color:#bca8bd; font:12px/1.7 sans-serif; }
 .intro-open, .intro-open body { overflow:hidden; }
 .intro { position:fixed; inset:0; width:100%; height:100dvh; z-index:1000; overflow:hidden; background:#f6e8ec; isolation:isolate; }
 .intro-collage { position:absolute; inset:0; }

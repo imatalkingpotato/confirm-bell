@@ -12,6 +12,7 @@
   // Intro controls the start; prepare the player while its collage images load.
   window.confirmBellMusic = {
     prepared: preparation,
+    get available(){return ready&&!failed;},
     start(restart=false) {
       if(failed)return;
       wanted=true;restartPending=restart;

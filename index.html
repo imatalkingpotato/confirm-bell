@@ -6,15 +6,36 @@
 <meta name="theme-color" content="#1a1625">
 <title>컨펌벨 🔨 — 컨펌 재촉 스트레스 해소 게임</title>
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@900&display=swap">
+<script src="intro.js" defer></script>
 <script src="game.js" defer></script>
 <script src="music.js" defer></script>
 </head>
 <body>
-  <aside class="music-card" aria-label="배경 음악">
-    <div class="music-heading"><span>🎶 Now Playing</span><button id="musicToggle" type="button" aria-label="배경 음악 재생">▶</button></div>
-    <a href="https://www.youtube.com/watch?v=BeAE3ZRcMgs" target="_blank" rel="noopener">이 덱을 떠나주세요 1hr ver. ↗</a>
+  <section id="intro" class="intro" role="dialog" aria-modal="true" aria-label="컨펌벨 오프닝" hidden>
+    <div id="introCollage" class="intro-collage" aria-hidden="true"></div>
+    <div class="intro-veil" aria-hidden="true"></div>
+    <div class="intro-copy" aria-live="polite">
+      <span class="intro-ornament" aria-hidden="true">✧ ─── ❦ ─── ✧</span>
+      <p>우리 이렇게 오래 함께 했는데..</p>
+      <p>이쯤되면...</p>
+      <p>컨펌 좀 빨리 해줄 수 있을까...?</p>
+      <span class="intro-ornament bottom" aria-hidden="true">✦ ─── ❧ ─── ✦</span>
+    </div>
+    <div class="intro-whiteout" aria-hidden="true"></div>
+    <button id="introSkip" class="intro-skip" type="button">건너뛰기 ↗</button>
+  </section>
+  <aside class="music-card" id="musicCard" aria-label="배경 음악">
+    <div class="record-art" aria-hidden="true"><span>♪</span></div>
+    <div class="music-info"><div class="music-heading">🎶 Now Playing</div>
+      <a href="https://www.youtube.com/watch?v=BeAE3ZRcMgs" target="_blank" rel="noopener">이 덱을 떠나주세요 1hr ver. ↗</a>
+      <div id="musicWave" class="music-wave" aria-hidden="true"></div>
+      <input id="musicSeek" class="music-seek" type="range" min="0" max="1" step="1" value="0" disabled aria-label="음악 재생 위치">
+      <div class="music-times"><span id="musicCurrent">0:00</span><span id="musicDuration">--:--</span></div>
+      <div class="music-transport"><button id="musicBack" type="button" aria-label="10초 이전">−10</button><button id="musicToggle" type="button" aria-label="배경 음악 재생">▶</button><button id="musicForward" type="button" aria-label="10초 이후">+10</button></div>
+    </div>
     <div id="musicStatus" role="status">음악 연결 중…</div>
-    <div id="youtubePlayer" class="youtube-player"></div>
+    <div class="youtube-engine" aria-hidden="true"><div id="youtubePlayer"></div></div>
   </aside>
   <main>
     <header class="game-heading"><span class="eyebrow">THE CONFIRMATION ARCADE</span><h1>🔨 컨펌벨</h1><span class="edition">HARD HIT EDITION</span></header>
@@ -32,8 +53,8 @@
       <div class="box">타격 등급<strong class="num rank-name" id="hitRank">예의 바름</strong></div>
     </div>
     <button id="btn" type="button">🔨 컨펌 플리즈!</button>
-    <div class="controls"><button id="sfxToggle" type="button" aria-pressed="true">🔊 타격음 ON</button><button id="motionToggle" type="button" aria-pressed="true">화면 흔들림 ON</button></div>
-    <p class="hint">클릭 · 터치 · 스페이스바로 타격 · 숫자키 1~4로 담당자 변경<br>50콤보마다 대형 내려찍기 · 1,000 → 5,000콤보 특별 연출</p>
+    <div class="controls"><button id="sfxToggle" type="button" aria-pressed="true">🔊 타격음 ON</button><button id="motionToggle" type="button" aria-pressed="true">화면 흔들림 ON</button><button id="introReplay" type="button">✧ 인트로 다시 보기</button></div>
+    <p class="hint">클릭 · 터치 · 스페이스바로 타격 · 숫자키 1~4로 담당자 변경<br>50콤보마다 풀스윙 · 캐릭터별 누적 1,000타마다 흔적 추가 (최대 5단계)</p>
     <div class="boards">
       <section class="board"><h2>📊 오늘의 리더보드</h2><div class="mode" id="boardMode">개인 기록 (이 브라우저에 저장됨)</div><div id="boardToday"></div></section>
       <section class="board"><h2>🗓 이번 달 리더보드</h2><div id="boardMonth"></div><div class="yearline" id="yearLine"></div></section>

@@ -56,6 +56,11 @@ function nowKeys(){
 let K = nowKeys();
 let cur = 0;
 let store = { daily:{}, monthly:{}, yearly:{}, myTotal:0, maxCombo:0 }; // 개인 기록(브라우저)
+// Opt-in visual fixture: never reads/writes real records or connects to Firebase.
+if(PREVIEW){
+  const seed=Math.min(6000,Math.max(0,Math.floor(Number(new URLSearchParams(location.search).get('hits'))||0)));
+  if(seed){store.daily[K.day]=[seed,seed,seed,seed];store.monthly[K.mon]=[seed,seed,seed,seed];store.yearly[K.year]=[seed,seed,seed,seed];store.myTotal=seed*4;}
+}
 let combo = 0, maxCombo = 0, comboTimer = null;
 let shared = { daily:null, monthly:null, yearly:null }; // 팀 모드 서버 값
 let pending = [0,0,0,0]; // 서버 전송 대기분
@@ -70,6 +75,9 @@ try {
   const saved = PREVIEW ? null : JSON.parse(localStorage.getItem(LS_KEY));
   if(saved){ store = Object.assign(store, saved); maxCombo = store.maxCombo || 0; }
 } catch(e){}
+// Personal lifetime totals come from the existing yearly archives, not the combo.
+const lifetimeHits = PEOPLE.map((_,i)=>Object.values(store.yearly).reduce((n,year)=>n+(Number(year[i])||0),0));
+function injuryLevel(index){ return Math.min(5,Math.floor(lifetimeHits[index]/1000)); }
 function save(){
   if(PREVIEW) return;
   store.maxCombo = maxCombo;
@@ -138,6 +146,23 @@ function drawJ(cx,cy,scale=1){
   glyph.forEach((row,y)=>[...row].forEach((v,x)=>{
     if(v==='1') px(cx+(x-2)*scale,cy+(y-3)*scale,scale,scale,'#fffaf4');
   }));
+}
+function drawInjuries(hx,hy,level){
+  if(level>=1){ // Purple eye bruise, kept clear of the centered J glyph.
+    px(hx,hy+7,5,5,'#86509b');px(hx+1,hy+8,3,3,'#58366d');px(hx+2,hy+9,2,1,'#c597ce');
+  }
+  if(level>=2){ // Shoulder plaster remains visible above the laptop.
+    px(hx-3,hy+17,11,4,'#f4c69d');px(hx+1,hy+17,4,4,'#d9a57d');px(hx-2,hy+19,1,1,'#bd8969');px(hx+6,hy+19,1,1,'#bd8969');
+  }
+  if(level>=3){
+    px(hx-3,hy-1,22,5,'#fff3e6');px(hx-3,hy+1,22,1,'#c9c0bc');px(hx+17,hy+2,4,3,'#e8ddd5');px(hx+19,hy+5,2,7,'#fff3e6');
+  }
+  if(level>=4){
+    px(hx+10,hy+12,7,4,'#f2bc91');px(hx+12,hy+12,3,4,'#c58f6b');px(hx+11,hy+13,1,1,'#ffe6c8');
+  }
+  if(level>=5){
+    px(hx+27,hy+24,6,13,'#f7ece2');px(hx+27,hy+27,6,1,'#bdb2aa');px(hx+27,hy+31,6,1,'#bdb2aa');px(hx+27,hy+35,6,1,'#bdb2aa');
+  }
 }
 function drawScene(){
   ctx.clearRect(0,0,cv.width,cv.height);
@@ -229,6 +254,7 @@ function drawScene(){
 
 
   }
+  drawInjuries(hx,hy+dip,injuryLevel(cur));
   const deskDip=motionOn ? Math.sin(anim.desk*Math.PI)*anim.power*1.3 : 0;
   ctx.save(); ctx.translate(0,deskDip*S);
   px(10,62,108,5,'#8a5a30'); px(10,61,108,1,'#bd8847');
@@ -239,27 +265,34 @@ function drawScene(){
   // Laptop and desk clutter react to heavy impacts.
   ctx.save(); ctx.translate(64*S,60*S);
   if(motionOn) ctx.rotate(-recoil*.025*anim.power);
-  px(-20,0,40,2,'#e2e4ea'); px(-18,-16,36,16,'#c9cbd2'); px(-18,-16,36,1,'#f0f0f5');
-  px(17,-16,1,16,'#a7a9b0'); px(-18,-1,36,1,'#a7a9b0');
+  px(-20,0,40,2,'#e2e4ea'); px(-18,-12,36,12,'#c9cbd2'); px(-18,-12,36,1,'#f0f0f5');
+  px(17,-12,1,12,'#a7a9b0'); px(-18,-1,36,1,'#a7a9b0');
   ctx.fillStyle='#33384a'; ctx.font=`bold ${3.4*S}px Galmuri11, monospace`; ctx.textAlign='center';
   ctx.fillText(p.name+'님',0,-5.5*S); ctx.restore();
   px(21,58,13,3,'#f4e7d9'); px(24,56,12,2,'#c8c1d8'); px(95,56,6,5,'#eea454');
   ctx.restore();
-  // Swing with anticipation, contact and rebound instead of a single teleporting frame.
+  // Wide side-entry swing: long handle, rotating head, sweep trails and follow-through.
   const age=anim.age;
-  let angle=-.65, hammerY=3;
-  if(age<.055){ angle=-.65-age*5; hammerY=1; }
-  else if(age<.11){ const t=(age-.055)/.055; angle=-.925*(1-t); hammerY=1+17*t; }
-  else if(age<.19){ angle=.08; hammerY=18; }
-  else if(age<.42){ const t=(age-.19)/.23; angle=.08-.73*t; hammerY=18-15*t; }
-  const size=anim.power>=3 && age<.42 ? 1.5 : 1;
-  ctx.save(); ctx.translate(64*S,hammerY*S); ctx.rotate(angle); ctx.scale(size,size);
-  px(-2,-16,4,17,'#a85b2e'); px(-1,-16,1,16,'#e1a45c');
-  px(-4,-11,8,5,'#f5cfa7');
-  px(-13,0,26,10,'#ffcf40'); px(-14,0,5,10,'#f13d49'); px(9,0,5,10,'#f13d49');
-  px(-12,1,24,2,'#ffe88d'); px(-8,3,2,6,'#f5ac2c'); px(6,3,2,6,'#f5ac2c');
-  px(-14,9,28,2,'#9d2335');
-  ctx.restore();
+  if(age<.48){
+    const angle=age<.09 ? .62 : age<.24 ? .62-(age-.09)*6 : -.28+(age-.24)*10;
+    const size=anim.power>=3?1.35:1;
+    if(motionOn && age<.24){
+      for(let i=4;i>=1;i--){
+        ctx.save();ctx.globalAlpha=.045*(5-i);ctx.translate(108*S,64*S);ctx.rotate(angle+i*.32);
+        px(-62,-8,25,16,'#e83954');px(-49,-2,49,4,'#e3bfa8');ctx.restore();
+      }
+      ctx.strokeStyle='#ffb3a9';ctx.lineWidth=S*.6;ctx.globalAlpha=.7*(1-age/.24);
+      ctx.beginPath();ctx.arc(108*S,64*S,55*S,Math.PI+angle,Math.PI+angle+1.4);ctx.stroke();ctx.globalAlpha=1;
+    }
+    ctx.save();ctx.translate(108*S,64*S);ctx.rotate(angle);
+    px(-51,-2,54,5,'#783b2b');px(-51,-2,54,1,'#d89b62');
+    for(let n=-19;n<0;n+=4)px(n,-2,2,5,'#292231');
+    px(-4,-4,9,9,'#f5cfa7');
+    ctx.translate(-52*S,0);ctx.scale(size,size);
+    px(-14,-8,28,16,'#c72341');px(-16,-9,5,18,'#5a192c');px(11,-9,5,18,'#5a192c');
+    px(-11,-7,22,3,'#f65c69');px(-11,5,22,3,'#791c35');px(-9,-3,3,6,'#f7b16d');px(6,-3,3,6,'#f7b16d');
+    ctx.restore();
+  }
   if(anim.shock>0){
     const spread=(1-anim.shock)*13;
     ctx.strokeStyle=anim.power>=3?'#ff8a3d':'#ffdc6a'; ctx.lineWidth=S*(anim.shock+.2);
@@ -412,21 +445,21 @@ function impact(power){
   anim.shake=motionOn ? 1 : 0; anim.freeze=motionOn ? (power>=3?.045:.018) : 0;
   bonkSound(power);
   if(motionOn){
-    for(let i=0;i<(power>=3?28:9);i++){
-      debris.push({x:64+(Math.random()-.5)*16,y:29,vx:(Math.random()-.5)*100*power/2,
-        vy:-20-Math.random()*60,life:.4+Math.random()*.45,w:1+Math.random()*2,h:1+Math.random()*2,
-        c:['#ffcf40','#fff0cf','#ef7d39','#ddd5ee'][i%4]});
+    for(let i=0;i<(power>=3?48:20);i++){
+      debris.push({x:64+(Math.random()-.5)*12,y:34,vx:-30-Math.random()*85*power/2,
+        vy:-65+Math.random()*105,life:.45+Math.random()*.65,w:1+Math.random()*3,h:1+Math.random()*2,
+        c:['#bd173c','#ee3051','#86152d','#ff7581','#fff0cf'][i%5]});
     }
     if(power>=3) for(let i=0;i<8;i++) debris.push({x:20+Math.random()*88,y:60,vx:(Math.random()-.5)*80,vy:-40-Math.random()*50,life:1,w:4,h:2,c:'#f2e7dc'});
     debris=debris.slice(-140);
   }
 }
 function hit(){
-  if(celebrating) return;
+  if(celebrating || window.confirmBellIntroActive) return;
   const now=performance.now(); if(now-hitGate<45) return; hitGate=now;
   const p=PEOPLE[cur]; checkRollover();
   bucket(store.daily,K.day)[cur]++; bucket(store.monthly,K.mon)[cur]++; bucket(store.yearly,K.year)[cur]++;
-  store.myTotal++; if(sharedOn) pending[cur]++;
+  store.myTotal++; lifetimeHits[cur]++; if(sharedOn) pending[cur]++;
   combo++; maxCombo=Math.max(maxCombo,combo);
   const heavy=combo%50===0, critical=combo%10===0;
   const power=heavy?3.5:critical?2:1;
@@ -450,6 +483,9 @@ function hit(){
     if(combo>=1000){fanfare(); startFireworks(2400);}
   } else if(!PREVIEW && Math.random()<.001){
     updateHud(); celebrate(RARE[Math.floor(Math.random()*RARE.length)]);return;
+  }
+  if(lifetimeHits[cur]%1000===0 && lifetimeHits[cur]<=5000 && !MILESTONES[combo]){
+    banner(`${p.name}님 누적 ${lifetimeHits[cur].toLocaleString()}타 · 흔적 ${injuryLevel(cur)}/5`);
   }
   updateHud();
 }
@@ -497,7 +533,7 @@ function updateHud(){
   const rage=combo>0 && combo%50===0 ? 100 : combo%50*2;
   $('rage').textContent=rage+'%';$('rageFill').style.width=rage+'%';$('rageMeter').setAttribute('aria-valuenow',String(rage));
   $('hitRank').textContent=tierFor(combo);$('btn').classList.toggle('fury',rage>=80);
-  $('targetLabel').textContent=PEOPLE[cur].name+'님 · 컨펌 대기 중';
+  $('targetLabel').textContent=PEOPLE[cur].name+'님 · 누적 '+lifetimeHits[cur].toLocaleString()+'타'+(injuryLevel(cur)?' · 흔적 '+injuryLevel(cur)+'/5':'');
   const add=(a,b)=>a.map((v,i)=>v+b[i]);
   const cD = sharedOn ? add(shared.daily  ||[0,0,0,0], pending) : bucket(store.daily,K.day).slice();
   const cM = sharedOn ? add(shared.monthly||[0,0,0,0], pending) : bucket(store.monthly,K.mon).slice();
@@ -538,6 +574,7 @@ PEOPLE.forEach((p,i)=>{
 
 // ================= 입력 =================
 document.addEventListener('keydown',e=>{
+  if(window.confirmBellIntroActive) return;
   const tag=e.target.tagName;
   if(['INPUT','TEXTAREA','SELECT'].includes(tag) || e.target.isContentEditable) return;
   if(e.code==='Space' && (!['BUTTON','A'].includes(tag) || e.target.id==='btn')){e.preventDefault();hit();}

@@ -3,6 +3,7 @@
   const KEY = 'confirmbell_intro_kst_v1';
   const query = new URLSearchParams(location.search);
   const preview = query.get('preview') === '1';
+  if(preview && query.get('gallery')==='1') return;
   const overlay = document.getElementById('intro');
   const collage = document.getElementById('introCollage');
   const skip = document.getElementById('introSkip');

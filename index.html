@@ -10,6 +10,7 @@
 <script src="intro.js" defer></script>
 <script src="game.js" defer></script>
 <script src="music.js" defer></script>
+<script src="gallery.js" defer></script>
 </head>
 <body>
   <section id="intro" class="intro" role="dialog" aria-modal="true" aria-label="컨펌벨 오프닝" hidden>
@@ -49,12 +50,11 @@
     <div class="hud">
       <div class="box">현재 콤보<strong class="num combo-num" id="combo">0</strong></div>
       <div class="box">최대 콤보<strong class="num" id="maxCombo">0</strong></div>
-      <div class="box rage-box">분노 게이지<strong class="num" id="rage">0%</strong><div class="rage-track" role="progressbar" aria-label="분노 게이지" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="rageMeter"><span id="rageFill"></span></div></div>
-      <div class="box">타격 등급<strong class="num rank-name" id="hitRank">예의 바름</strong></div>
+      <div class="box rage-box">풀스윙 충전<strong class="num" id="rage">0%</strong><div class="rage-track" role="progressbar" aria-label="풀스윙 충전" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="rageMeter"><span id="rageFill"></span></div></div>
     </div>
     <button id="btn" type="button">🔨 컨펌 플리즈!</button>
     <div class="controls"><button id="sfxToggle" type="button" aria-pressed="true">🔊 타격음 ON</button><button id="motionToggle" type="button" aria-pressed="true">화면 흔들림 ON</button><button id="introReplay" type="button">✧ 인트로 다시 보기</button></div>
-    <p class="hint">클릭 · 터치 · 스페이스바로 타격 · 숫자키 1~4로 담당자 변경<br>50콤보마다 풀스윙 · 캐릭터별 누적 1,000타마다 흔적 추가 (최대 5단계)</p>
+    <p class="hint">클릭 · 터치 · 스페이스바로 타격 · 숫자키 1~4로 담당자 변경<br>50콤보마다 풀스윙 · 누적 1,000타마다 상태 변화 · 10,000타에 병원 침대</p>
     <div class="boards">
       <section class="board"><h2>📊 오늘의 리더보드</h2><div class="mode" id="boardMode">개인 기록 (이 브라우저에 저장됨)</div><div id="boardToday"></div></section>
       <section class="board"><h2>🗓 이번 달 리더보드</h2><div id="boardMonth"></div><div class="yearline" id="yearLine"></div></section>

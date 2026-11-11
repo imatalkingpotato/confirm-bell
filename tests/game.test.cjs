@@ -27,18 +27,17 @@ function harness({preview=true,saved=null,reduced=false}={}){
   vm.runInContext(fs.readFileSync('game.js','utf8'),context);
   return {context,elements,timers,frames,fetches,writes,doc,advance:ms=>now+=ms,run:x=>vm.runInContext(x,context),hit:()=>{now+=60;elements.get('btn').click()}};
 }
-test('5,000 accepted hits preserve totals, trigger each milestone, and bound live effects',()=>{
+test('10,000 accepted hits preserve totals, trigger each milestone, and bound live effects',()=>{
   const h=harness();
   const milestones=[];
-  for(let i=1;i<=5000;i++){
+  for(let i=1;i<=10000;i++){
     h.hit();
     if(i%1000===0){const b=h.elements.get('stageWrap').querySelectorAll('.milestone');assert.equal(b.length,1);assert.equal(b[0].children[0].textContent,i.toLocaleString()+' COMBO');milestones.push(i)}
   }
-  assert.deepEqual(milestones,[1000,2000,3000,4000,5000]);
-  assert.equal(h.run('combo'),5000);assert.equal(h.run('store.myTotal'),5000);
-  assert.equal(h.run('store.daily[K.day][0]'),5000);
-  assert.equal(h.elements.get('hitRank').textContent,'컨펌의 신');
-  assert.equal(h.elements.get('rage').textContent,'100%');
+  assert.deepEqual(milestones,[1000,2000,3000,4000,5000,6000,7000,8000,9000,10000]);
+  assert.equal(h.run('combo'),10000);assert.equal(h.run('store.myTotal'),10000);
+  assert.equal(h.run('store.daily[K.day][0]'),10000);
+  assert.equal(h.elements.get('rage').textContent,'풀스윙!');
   assert.ok(h.run('debris.length')<=140);
   assert.ok(h.elements.get('stageWrap').querySelectorAll('.float-text').length<=8);
   assert.equal(h.fetches.length,0);assert.equal(h.writes.length,0);
@@ -55,8 +54,8 @@ test('all requested personal lines can be reached and never leak to a different 
   for(let index=0;index<4;index++){
     h.elements.get('tabs').children[index].click();
     const lines=h.run(`PEOPLE[${index}].lines`),seen=new Set();
-    for(let i=0;i<lines.length*5;i++){h.hit();seen.add(h.run('bubbleEl.textContent'));}
-    for(const line of lines) assert.ok(seen.has(line),line);
+    for(let i=0;i<Math.max(lines.length,8)*10;i++){h.hit();seen.add(h.run('bubbleEl.textContent'));}
+    for(const line of [...lines,...h.run('COMMON_LINES')]) assert.ok(seen.has(line),line);
   }
 });
 test('all character renders and animation frames run, including reduced motion',()=>{
@@ -83,7 +82,7 @@ test('music autoplay block, first interaction, manual pause and embed failure ha
   config.events.onReady({target:player});assert.equal(played,1);
   config.events.onAutoplayBlocked();assert.match(h.elements.get('musicStatus').textContent,/첫 타격/);
   h.doc.events.pointerdown({type:'pointerdown',target:{closest:()=>null}});assert.equal(played,2);
-  config.events.onStateChange({data:1});h.elements.get('musicToggle').click();assert.equal(paused,1);
+  config.events.onStateChange({data:1});assert.equal(h.elements.get('musicStatus').textContent,'');h.elements.get('musicToggle').click();assert.equal(paused,1);
   config.events.onStateChange({data:2});h.doc.events.pointerdown({type:'pointerdown',target:{closest:()=>null}});assert.equal(played,2);
   h.elements.get('musicSeek').value='120';h.elements.get('musicSeek').events.input();h.elements.get('musicSeek').events.change();assert.equal(seeks.at(-1),120);
   h.elements.get('musicForward').click();assert.equal(seeks.at(-1),130);
@@ -92,12 +91,28 @@ test('music autoplay block, first interaction, manual pause and embed failure ha
   config.events.onError();assert.match(h.elements.get('musicStatus').textContent,/재생 불가/);
 });
 
-test('injuries track each character lifetime independently of combo and stop at five',()=>{
+test('injuries track each character lifetime independently of combo and stop at ten',()=>{
  const h=harness({preview:false,saved:{daily:{},monthly:{},yearly:{2025:[990,1999,2999,4999],2026:[9,0,0,0]},myTotal:999,maxCombo:0}});
  h.run('Math.random=()=>.5');
  assert.equal(h.run('injuryLevel(0)'),0);h.hit();assert.equal(h.run('injuryLevel(0)'),1);
  for(const i of [1,2,3]){h.elements.get('tabs').children[i].click();h.hit();assert.equal(h.run(`injuryLevel(${i})`),i===3?5:i+1);}
- h.run('lifetimeHits[3]=5999');h.hit();assert.equal(h.run('injuryLevel(3)'),5);
+ h.run('lifetimeHits[3]=5999');h.hit();assert.equal(h.run('injuryLevel(3)'),6);
+ h.run('lifetimeHits[3]=10999');h.hit();assert.equal(h.run('injuryLevel(3)'),10);
  for(let level=0;level<=5;level++)h.run(`drawInjuries(56,27,${level})`);
  h.context.window.confirmBellIntroActive=true;const total=h.run('store.myTotal');h.hit();assert.equal(h.run('store.myTotal'),total);
+});
+
+test('all ten stages render for all characters, including wheelchair and hospital bed',()=>{
+ const h=harness();
+ for(let person=0;person<4;person++){
+  h.run(`cur=${person}`);
+  for(let level=0;level<=10;level++){
+   h.run(`lifetimeHits[cur]=${level*1000};anim.age=1;drawScene()`);
+   assert.equal(h.run('injuryLevel(cur)'),level);
+   h.hit();h.run('loop(100)');
+  }
+ }
+ h.run('combo=49');h.hit();assert.equal(h.run('anim.power'),3.5);
+ assert.equal(h.elements.get('rage').textContent,'풀스윙!');
+ h.hit();assert.equal(h.elements.get('rage').textContent,'2%');
 });

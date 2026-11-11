@@ -6,6 +6,7 @@
 //  비워두면("") 개인 기록 모드(이 브라우저에만 저장)로 동작.
 // ═══════════════════════════════════════════════════════════
 const PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
+const GALLERY = PREVIEW && new URLSearchParams(location.search).get('gallery') === '1';
 const SHARED_DB_URL = 'https://confirm-bell-default-rtdb.firebaseio.com/confirmbell';
 
 // ================= 담당자 데이터 =================
@@ -15,7 +16,8 @@ const PEOPLE = [
   { lines:['(0.001초 만에) 👀','지금 볼게요'], name:'우리', hair:'#171310', hairStyle:'bob',  top:'#a4d4a0' },
   { avatar:'initial', lines:['덱으로 볼게요','1번이요~'], name:'지영', hair:'#171310', hairStyle:'tied', top:'#d9c47f' },
 ];
-const REACTIONS = ['잠시만요~','아 네네 지금 볼게요','회의 중이에요;;','5분만요!!','아직 안 봤어요…','어 방금 열었어요'];
+const COMMON_LINES = ['보고 있습니다.','방금 보려고 했는데요.','TF 다녀올게요','에디터님들 의견 받아봐 주세요','이렇게 급한 건은 댓글 말고 슬랙으로 주세요','마음은 이미 컨펌했어요.','컨펌 완료. 망치 내려놓으세요.','이 망치도 컨펌받은 건가요?'];
+const STAGE_NAMES = ['컨펌 대기','눈가 멍','어깨 밴드','머리 붕대','볼 밴드','팔 붕대','목발 등장','다리 깁스','수액 연결','휠체어 출근','병상 컨펌'];
 const RARE = ['덱으로 볼게요!','앗 미팅이 많아 지금 보겠습니다','4시에 볼게요~','오늘까지 컨펌해두겠습니다','지금 바로 확인할게요!'];
 const MILESTONES = {
   10:'어셋/카피/썸네일 컨펌 부탁드립니다 🙏',
@@ -40,7 +42,12 @@ const MILESTONES = {
   2000:'덱이 흔들리는 중',
   3000:'리마인드의 한계를 돌파했다',
   4000:'사무실 최종 보스',
-  5000:'컨펌의 신 · 전설 달성'
+  5000:'컨펌의 신 · 전설 달성',
+  6000:'목발 짚고도 컨펌 대기',
+  7000:'깁스보다 단단한 컨펌 의지',
+  8000:'수액은 들어가는데 컨펌은 안 나와요',
+  9000:'휠체어 타고 덱으로 갑니다',
+  10000:'병상에서도 컨펌은 계속된다'
 };
 
 // ================= 상태 & 저장 =================
@@ -58,7 +65,7 @@ let cur = 0;
 let store = { daily:{}, monthly:{}, yearly:{}, myTotal:0, maxCombo:0 }; // 개인 기록(브라우저)
 // Opt-in visual fixture: never reads/writes real records or connects to Firebase.
 if(PREVIEW){
-  const seed=Math.min(6000,Math.max(0,Math.floor(Number(new URLSearchParams(location.search).get('hits'))||0)));
+  const seed=Math.min(11000,Math.max(0,Math.floor(Number(new URLSearchParams(location.search).get('hits'))||0)));
   if(seed){store.daily[K.day]=[seed,seed,seed,seed];store.monthly[K.mon]=[seed,seed,seed,seed];store.yearly[K.year]=[seed,seed,seed,seed];store.myTotal=seed*4;}
 }
 let combo = 0, maxCombo = 0, comboTimer = null;
@@ -68,7 +75,7 @@ let anim = { hammer:0, bonk:0, frown:0, sweat:0, age:1, power:1, shake:0, freeze
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let motionOn = !reducedMotion, sfxOn = true;
 let debris = [], hitGate = -Infinity;
-const lineCursor = [0,0,0,0];
+const lineCursor = [0,0,0,0], commonCursor = [0,0,0,0], speechTurn = [0,0,0,0];
 let celebrating = false;
 
 try {
@@ -77,7 +84,7 @@ try {
 } catch(e){}
 // Personal lifetime totals come from the existing yearly archives, not the combo.
 const lifetimeHits = PEOPLE.map((_,i)=>Object.values(store.yearly).reduce((n,year)=>n+(Number(year[i])||0),0));
-function injuryLevel(index){ return Math.min(5,Math.floor(lifetimeHits[index]/1000)); }
+function injuryLevel(index){ return Math.min(10,Math.floor(lifetimeHits[index]/1000)); }
 function save(){
   if(PREVIEW) return;
   store.maxCombo = maxCombo;
@@ -164,6 +171,81 @@ function drawInjuries(hx,hy,level){
     px(hx+27,hy+24,6,13,'#f7ece2');px(hx+27,hy+27,6,1,'#bdb2aa');px(hx+27,hy+31,6,1,'#bdb2aa');px(hx+27,hy+35,6,1,'#bdb2aa');
   }
 }
+function drawCrutches(){
+  for(const x of [19,29]){
+    ctx.save();ctx.translate(x*S,44*S);ctx.rotate(-.12);
+    px(-6,0,12,3,'#d8b48b');px(-5,3,2,16,'#b8bfce');px(3,3,2,16,'#e0e4ed');
+    px(-4,15,8,2,'#d8b48b');px(-2,17,4,20,'#b8bfce');px(-3,36,6,3,'#383449');ctx.restore();
+  }
+}
+function drawIV(hospital=false){
+  const x=hospital?110:108;
+  px(x,14,2,61,'#aebfcb');px(x-7,13,10,2,'#d8eaf0');
+  px(x-4,11,2,5,'#d8eaf0');px(x-8,16,10,13,'#d3edf2');px(x-7,20,8,7,'#79cbd5');
+  px(x-6,17,5,2,'#f2ffff');px(x-4,29,2,4,'#e4f6fa');
+  const drop=motionOn?Math.floor(anim.age*7)%4:2;px(x-4,29+drop,1,1,'#59b6c8');
+  ctx.strokeStyle='#c4edf4';ctx.lineWidth=S*.65;ctx.beginPath();ctx.moveTo((x-3)*S,33*S);
+  ctx.lineTo((x-3)*S,43*S);ctx.lineTo((hospital?74:88)*S,(hospital?51:54)*S);ctx.stroke();
+  px(x-7,75,16,2,'#9faeba');pixelDisc(x-7,78,2,'#262b3d');pixelDisc(x+8,78,2,'#262b3d');
+}
+function drawWheelchair(){
+  px(44,42,4,28,'#8797b4');px(43,44,38,14,'#253451');px(44,58,38,5,'#55698c');
+  pixelDisc(43,71,12,'#151c2e');pixelDisc(43,71,9,'#aebdd5');pixelDisc(43,71,7,'#33425e');
+  pixelDisc(83,75,7,'#151c2e');pixelDisc(83,75,4,'#b4c5d9');
+  px(42,70,3,3,'#dce7f3');px(44,64,40,3,'#aebdd5');px(82,64,3,10,'#aebdd5');
+  px(44,45,8,3,'#cad6e8');px(75,45,8,3,'#cad6e8');
+  px(59,61,9,14,'#c9b8ac');px(70,61,9,14,'#fff0e4');
+  for(let y=64;y<75;y+=4)px(70,y,9,1,'#c4b5ac');
+  px(58,75,12,3,'#242239');px(70,75,12,3,'#eee3d7');
+  // A small laptop stays on the patient's lap.
+  px(53,49,24,12,'#c9cbd2');px(51,61,28,2,'#e4e5ed');
+}
+function drawHospitalBed(p){
+  px(13,56,89,8,'#f1f4f4');px(13,64,89,4,'#a4b9c2');
+  px(13,41,4,30,'#bbcdd5');px(99,50,4,21,'#bbcdd5');
+  px(17,69,3,9,'#8c9fac');px(94,69,3,9,'#8c9fac');pixelDisc(18,80,3,'#23364a');pixelDisc(96,80,3,'#23364a');
+  px(20,45,25,12,'#fffdf2');px(21,46,23,2,'#e1e8e8');
+  // Sideways patient, identifiable even with the blanket and bandages.
+  ctx.save();ctx.translate(33*S,45*S);ctx.rotate(-.17);
+  if(p.avatar==='orange')pixelDisc(0,0,10,'#e99024');
+  else if(p.avatar==='initial'){pixelDisc(0,0,10,'#8f7167');drawJ(0,0,1);}
+  else {
+    px(-9,-10,18,20,p.hair);px(-7,-7,15,14,'#f5cfa7');px(-8,-9,17,4,p.hair);
+    px(-4,0,3,1,'#39273b');px(3,0,3,1,'#39273b');px(0,5,3,1,'#b27664');
+  }
+  px(-10,-9,20,4,'#fff3e7');px(-10,-7,20,1,'#bcb8b8');
+  px(-6,-1,5,4,'#815094');px(-5,0,3,2,'#53336c');px(4,4,5,3,'#e9b28d');
+  ctx.restore();
+  px(44,45,49,13,'#86c5ce');px(45,46,47,3,'#b9e1e2');px(49,49,3,8,'#5c9eae');
+  px(55,54,34,3,'#6bb1bf');px(44,52,18,4,'#f6eee3');
+  for(let x=46;x<61;x+=4)px(x,52,1,4,'#c4b9b3');
+  px(21,65,69,2,'#ddebf0');px(23,59,2,8,'#b7cbd4');px(88,59,2,8,'#b7cbd4');
+  drawIV(true);
+  // Bedside monitor; decorative heartbeat only.
+  px(5,12,20,16,'#d6e4e7');px(7,14,16,12,'#182c39');
+  ctx.strokeStyle='#76e0bd';ctx.lineWidth=S*.6;ctx.beginPath();
+  [[8,21],[11,21],[13,18],[15,23],[17,17],[19,21],[22,21]].forEach(([x,y],i)=>i?ctx.lineTo(x*S,y*S):ctx.moveTo(x*S,y*S));ctx.stroke();
+}
+function impactPoint(){return injuryLevel(cur)>=10?{x:34,y:44}:{x:71,y:32};}
+function drawRearHammer(){
+  if(anim.age>=.42)return;
+  const contact=impactPoint(),age=anim.age;
+  const pivot={x:contact.x+33,y:contact.y-18};
+  const angle=age<.065?-.5:age<.21?-.5+(age-.065)*4.3:.124-(age-.21)*8;
+  const heavy=anim.power>=3;
+  if(motionOn&&age<.23){
+    for(let i=4;i>=1;i--){ctx.save();ctx.globalAlpha=.04*(5-i);ctx.translate(pivot.x*S,pivot.y*S);ctx.rotate(angle-i*.34);px(-49,-8,24,16,'#cd2541');px(-35,-2,35,4,'#bc8969');ctx.restore();}
+    ctx.strokeStyle='#e95b68';ctx.lineWidth=S*.7;ctx.globalAlpha=.65*(1-age/.23);
+    ctx.beginPath();ctx.arc(pivot.x*S,pivot.y*S,37*S,Math.PI+angle-1.4,Math.PI+angle);ctx.stroke();ctx.globalAlpha=1;
+  }
+  ctx.save();ctx.translate(pivot.x*S,pivot.y*S);ctx.rotate(angle);
+  px(-39,-2,42,5,'#804032');px(-39,-2,42,1,'#cf9c6c');
+  for(let x=-17;x<0;x+=4)px(x,-2,2,5,'#242230');px(-3,-4,8,9,'#eac39f');
+  ctx.translate(-37*S,0);ctx.scale(heavy?1.35:1,heavy?1.35:1);
+  px(-13,-8,26,16,'#b71d37');px(-15,-9,5,18,'#461527');px(10,-9,5,18,'#461527');
+  px(-10,-7,20,3,'#ed5362');px(-10,5,20,3,'#71182e');px(-8,-2,3,5,'#e8a461');px(5,-2,3,5,'#e8a461');ctx.restore();
+}
+
 function drawScene(){
   ctx.clearRect(0,0,cv.width,cv.height);
   ctx.save();
@@ -171,7 +253,7 @@ function drawScene(){
     const strength=anim.shake*anim.power*9;
     ctx.translate(Math.sin(anim.age*93)*strength,Math.cos(anim.age*79)*strength*.7);
   }
-  const p = PEOPLE[cur], hx=56, hy=27;
+  const p = PEOPLE[cur], hx=56, hy=27, level=injuryLevel(cur);
   const frown=anim.frown>0;
   const recoil=Math.sin(Math.min(1,anim.bonk)*Math.PI);
   const dip=motionOn ? recoil*(anim.power>2?7:3) : 0;
@@ -182,6 +264,12 @@ function drawScene(){
   px(100,19,10,7,'#7c96c8'); px(112,19,10,7,'#93aad4');
   px(6,13,18,24,'#b3222d'); px(9,17,12,3,'#fff'); px(9,23,12,2,'#e8b0b4'); px(9,27,9,2,'#e8b0b4');
   px(10,31,10,4,'#8c1a22');
+  if(level>=10){
+    px(0,0,128,64,'#c7dfe0');px(0,64,128,24,'#829fae');
+    px(95,4,27,5,'#edf6f5');
+    drawRearHammer();drawHospitalBed(p);
+  } else {
+  drawRearHammer();
   // 이슬: the orange silhouette from the supplied reference, built on the same pixel grid.
   if(p.avatar==='orange'){
     pixelDisc(hx+8,hy+7+dip,10,'#e99024');
@@ -191,8 +279,7 @@ function drawScene(){
     }
   } else {
   // 의자 등받이
-  px(hx-9, hy+9, 34, 30, '#463a63');
-  px(hx-9, hy+9, 34, 2, '#584a7c');
+  if(level<9){px(hx-9, hy+9, 34, 30, '#463a63');px(hx-9, hy+9, 34, 2, '#584a7c');}
   // 몸통 (책상까지 이어짐)
   px(hx-4, hy+17+dip, 24, 22, p.top);
   px(hx-2, hy+20+dip, 3, 14, shade(p.top));
@@ -255,6 +342,7 @@ function drawScene(){
 
   }
   drawInjuries(hx,hy+dip,injuryLevel(cur));
+  if(level<9){
   const deskDip=motionOn ? Math.sin(anim.desk*Math.PI)*anim.power*1.3 : 0;
   ctx.save(); ctx.translate(0,deskDip*S);
   px(10,62,108,5,'#8a5a30'); px(10,61,108,1,'#bd8847');
@@ -271,35 +359,23 @@ function drawScene(){
   ctx.fillText(p.name+'님',0,-5.5*S); ctx.restore();
   px(21,58,13,3,'#f4e7d9'); px(24,56,12,2,'#c8c1d8'); px(95,56,6,5,'#eea454');
   ctx.restore();
-  // Wide side-entry swing: long handle, rotating head, sweep trails and follow-through.
-  const age=anim.age;
-  if(age<.48){
-    const angle=age<.09 ? .62 : age<.24 ? .62-(age-.09)*6 : -.28+(age-.24)*10;
-    const size=anim.power>=3?1.35:1;
-    if(motionOn && age<.24){
-      for(let i=4;i>=1;i--){
-        ctx.save();ctx.globalAlpha=.045*(5-i);ctx.translate(108*S,64*S);ctx.rotate(angle+i*.32);
-        px(-62,-8,25,16,'#e83954');px(-49,-2,49,4,'#e3bfa8');ctx.restore();
-      }
-      ctx.strokeStyle='#ffb3a9';ctx.lineWidth=S*.6;ctx.globalAlpha=.7*(1-age/.24);
-      ctx.beginPath();ctx.arc(108*S,64*S,55*S,Math.PI+angle,Math.PI+angle+1.4);ctx.stroke();ctx.globalAlpha=1;
-    }
-    ctx.save();ctx.translate(108*S,64*S);ctx.rotate(angle);
-    px(-51,-2,54,5,'#783b2b');px(-51,-2,54,1,'#d89b62');
-    for(let n=-19;n<0;n+=4)px(n,-2,2,5,'#292231');
-    px(-4,-4,9,9,'#f5cfa7');
-    ctx.translate(-52*S,0);ctx.scale(size,size);
-    px(-14,-8,28,16,'#c72341');px(-16,-9,5,18,'#5a192c');px(11,-9,5,18,'#5a192c');
-    px(-11,-7,22,3,'#f65c69');px(-11,5,22,3,'#791c35');px(-9,-3,3,6,'#f7b16d');px(6,-3,3,6,'#f7b16d');
-    ctx.restore();
+  } else {drawWheelchair();}
+  if(level>=6)drawCrutches();
+  if(level>=7&&level<9){
+    px(73,68,10,13,'#f2ece4');
+    for(let y=70;y<80;y+=3)px(73,y,10,1,'#bdb3b0');
+    px(72,80,15,4,'#e0d6d0');
   }
+  if(level>=8)drawIV();
+  }
+  const contact=impactPoint();
   if(anim.shock>0){
     const spread=(1-anim.shock)*13;
-    ctx.strokeStyle=anim.power>=3?'#ff8a3d':'#ffdc6a'; ctx.lineWidth=S*(anim.shock+.2);
-    ctx.beginPath(); ctx.ellipse(64*S,(hy+3)*S,(9+spread)*S,(3+spread*.3)*S,0,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle=anim.power>=3?'#ff6677':'#be2445'; ctx.lineWidth=S*(anim.shock+.2);
+    ctx.beginPath(); ctx.ellipse(contact.x*S,contact.y*S,(9+spread)*S,(3+spread*.3)*S,0,0,Math.PI*2); ctx.stroke();
     for(let i=0;i<8;i++){
       const a=i*Math.PI/4;
-      px(64+Math.cos(a)*(12+spread),hy+3+Math.sin(a)*(8+spread),2,2,i%2?'#fff2c3':'#ff8f42');
+      px(contact.x+Math.cos(a)*(12+spread),contact.y+Math.sin(a)*(8+spread),2,2,i%2?'#e93e53':'#a71430');
     }
   }
   debris.forEach(d=>{ctx.globalAlpha=Math.min(1,d.life*3);px(d.x,d.y,d.w,d.h,d.c);});
@@ -309,6 +385,7 @@ function drawScene(){
 // ================= 애니메이션 루프 =================
 let last=0;
 function loop(t){
+  if(GALLERY) return;
   const dt=Math.min(Math.max((t-last)/1000,0),.05); last=t;
   if(anim.freeze>0){ anim.freeze-=dt; }
   else {
@@ -432,30 +509,23 @@ function celebrate(quote){
 
 // ================= 게임 로직 =================
 const wrap=document.getElementById('stageWrap');
-function tierFor(n){
-  if(n>=5000) return '컨펌의 신';
-  if(n>=1000) return '덱 파괴자';
-  if(n>=200) return '컨펌 광전사';
-  if(n>=50) return '인내심 바닥';
-  if(n>=10) return '리마인드 중';
-  return '예의 바름';
-}
 function impact(power){
   anim.bonk=1; anim.frown=.6; anim.shock=1; anim.desk=1;
   anim.shake=motionOn ? 1 : 0; anim.freeze=motionOn ? (power>=3?.045:.018) : 0;
   bonkSound(power);
   if(motionOn){
-    for(let i=0;i<(power>=3?48:20);i++){
-      debris.push({x:64+(Math.random()-.5)*12,y:34,vx:-30-Math.random()*85*power/2,
-        vy:-65+Math.random()*105,life:.45+Math.random()*.65,w:1+Math.random()*3,h:1+Math.random()*2,
-        c:['#bd173c','#ee3051','#86152d','#ff7581','#fff0cf'][i%5]});
+    const contact=impactPoint();
+    for(let i=0;i<(power>=3?66:32);i++){
+      debris.push({x:contact.x+(Math.random()-.5)*8,y:contact.y,vx:-35-Math.random()*95*power/2,
+        vy:-75+Math.random()*115,life:.7+Math.random()*.7,w:1+Math.random()*3,h:1+Math.random()*3,
+        c:['#a40e28','#dc2042','#670d24','#ef3d56','#b21935'][i%5]});
     }
     if(power>=3) for(let i=0;i<8;i++) debris.push({x:20+Math.random()*88,y:60,vx:(Math.random()-.5)*80,vy:-40-Math.random()*50,life:1,w:4,h:2,c:'#f2e7dc'});
     debris=debris.slice(-140);
   }
 }
 function hit(){
-  if(celebrating || window.confirmBellIntroActive) return;
+  if(celebrating || window.confirmBellIntroActive || GALLERY) return;
   const now=performance.now(); if(now-hitGate<45) return; hitGate=now;
   const p=PEOPLE[cur]; checkRollover();
   bucket(store.daily,K.day)[cur]++; bucket(store.monthly,K.mon)[cur]++; bucket(store.yearly,K.year)[cur]++;
@@ -471,12 +541,13 @@ function hit(){
   comboTimer=setTimeout(()=>{combo=0;updateHud();},1800);
   spawnFloat(heavy?'콰아앙!!':critical?'쾅!!':['퍽!','쾅!','빡!'][combo%3],340+Math.random()*55,120+Math.random()*20);
   if(critical){
-    const badge=document.getElementById('impactBadge'); badge.textContent=heavy?'DECK BREAKER!':'CRITICAL!';
+    const badge=document.getElementById('impactBadge'); badge.textContent=heavy?'풀스윙!':'CRITICAL!';
     badge.classList.remove('active'); void badge.offsetWidth; badge.classList.add('active');
   }
   // Personal lines cycle so every supplied line can actually be encountered.
   if(combo===1 || combo%5===0){
-    speak(p.lines[lineCursor[cur]++ % p.lines.length]);
+    const personal=speechTurn[cur]++ % 2 === 0;
+    speak(personal ? p.lines[lineCursor[cur]++ % p.lines.length] : COMMON_LINES[commonCursor[cur]++ % COMMON_LINES.length]);
   }
   if(MILESTONES[combo]){
     banner(MILESTONES[combo],combo>=1000?combo:0);
@@ -484,8 +555,8 @@ function hit(){
   } else if(!PREVIEW && Math.random()<.001){
     updateHud(); celebrate(RARE[Math.floor(Math.random()*RARE.length)]);return;
   }
-  if(lifetimeHits[cur]%1000===0 && lifetimeHits[cur]<=5000 && !MILESTONES[combo]){
-    banner(`${p.name}님 누적 ${lifetimeHits[cur].toLocaleString()}타 · 흔적 ${injuryLevel(cur)}/5`);
+  if(lifetimeHits[cur]%1000===0 && lifetimeHits[cur]<=10000 && !MILESTONES[combo]){
+    banner(`${p.name}님 누적 ${lifetimeHits[cur].toLocaleString()}타 · ${STAGE_NAMES[injuryLevel(cur)]}`);
   }
   updateHud();
 }
@@ -532,8 +603,9 @@ function updateHud(){
   $('maxCombo').textContent=maxCombo;
   const rage=combo>0 && combo%50===0 ? 100 : combo%50*2;
   $('rage').textContent=rage+'%';$('rageFill').style.width=rage+'%';$('rageMeter').setAttribute('aria-valuenow',String(rage));
-  $('hitRank').textContent=tierFor(combo);$('btn').classList.toggle('fury',rage>=80);
-  $('targetLabel').textContent=PEOPLE[cur].name+'님 · 누적 '+lifetimeHits[cur].toLocaleString()+'타'+(injuryLevel(cur)?' · 흔적 '+injuryLevel(cur)+'/5':'');
+  $('btn').classList.toggle('fury',rage>=80);
+  $('rage').textContent=rage===100?'풀스윙!':rage+'%';
+  $('targetLabel').textContent=PEOPLE[cur].name+'님 · 누적 '+lifetimeHits[cur].toLocaleString()+'타';
   const add=(a,b)=>a.map((v,i)=>v+b[i]);
   const cD = sharedOn ? add(shared.daily  ||[0,0,0,0], pending) : bucket(store.daily,K.day).slice();
   const cM = sharedOn ? add(shared.monthly||[0,0,0,0], pending) : bucket(store.monthly,K.mon).slice();
@@ -574,7 +646,7 @@ PEOPLE.forEach((p,i)=>{
 
 // ================= 입력 =================
 document.addEventListener('keydown',e=>{
-  if(window.confirmBellIntroActive) return;
+  if(window.confirmBellIntroActive || GALLERY) return;
   const tag=e.target.tagName;
   if(['INPUT','TEXTAREA','SELECT'].includes(tag) || e.target.isContentEditable) return;
   if(e.code==='Space' && (!['BUTTON','A'].includes(tag) || e.target.id==='btn')){e.preventDefault();hit();}

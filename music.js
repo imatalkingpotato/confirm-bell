@@ -1,5 +1,7 @@
 'use strict';
 (() => {
+  const query=new URLSearchParams(location.search);
+  if(query.get('preview')==='1' && query.get('gallery')==='1') return;
   const VIDEO_ID = 'BeAE3ZRcMgs';
   const $ = id => document.getElementById(id);
   const toggle = $('musicToggle'), status = $('musicStatus'), seek = $('musicSeek');
@@ -82,8 +84,8 @@
         },
         onStateChange(event) {
           playing = event.data === 1;
-          if (playing) { wanted = true; status.textContent = '재생 중'; }
-          else if (event.data === 2) { status.textContent = '일시정지'; }
+          if (playing) { wanted = true; status.textContent = '';  }
+          else if (event.data === 2) { status.textContent = '';  }
           else if (event.data === 3) { status.textContent = '음악 불러오는 중…'; }
           else if (event.data === 0) { status.textContent = '다시 재생 중…'; if(wanted)requestPlay(); }
           render();sync();

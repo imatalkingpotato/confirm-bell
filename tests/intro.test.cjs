@@ -3,9 +3,9 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 function harness({seen='',now='2026-11-11T14:59:59Z',preview=false,throws=false,reduced=false,broken=false}={}){
- const nodes=new Map(),timers=new Map(),writes=[];let seq=0;
+ const nodes=new Map(),timers=new Map(),writes=[],musicStarts=[];let seq=0;
  class El{
-  constructor(){this.children=[];this.events={};this.hidden=false;this.inert=false;this.style={setProperty(){}};this.classes=new Set();this.classList={add:(...s)=>s.forEach(v=>this.classes.add(v)),remove:(...s)=>s.forEach(v=>this.classes.delete(v)),toggle:(v,on)=>on?this.classes.add(v):this.classes.delete(v)};}
+  constructor(){this.children=[];this.events={};this.hidden=false;this.inert=false;this.style={setProperty(){}};this.classes=new Set();this.classList={contains:v=>this.classes.has(v),add:(...s)=>s.forEach(v=>this.classes.add(v)),remove:(...s)=>s.forEach(v=>this.classes.delete(v)),toggle:(v,on)=>on?this.classes.add(v):this.classes.delete(v)};}
   appendChild(c){this.children.push(c)}
   focus(){doc.activeElement=this}
   addEventListener(k,f){this.events[k]=f}
@@ -15,11 +15,11 @@ function harness({seen='',now='2026-11-11T14:59:59Z',preview=false,throws=false,
  const doc=new El();doc.documentElement=new El();doc.activeElement={tagName:'BODY'};doc.getElementById=get;doc.createElement=()=>new El();doc.querySelector=get;
  get('intro').hidden=true;get('introReplay').tagName='BUTTON';
  class D extends Date{constructor(...args){super(...(args.length?args:[now]))}}
- const ctx=vm.createContext({document:doc,window:{},URLSearchParams,location:{search:preview?'?preview=1':''},Intl,Date:D,Promise,
+ const ctx=vm.createContext({document:doc,window:{confirmBellMusic:{prepared:Promise.resolve(),start:restart=>musicStarts.push(restart)}},URLSearchParams,location:{search:preview?'?preview=1':''},Intl,Date:D,Promise,
   matchMedia:()=>({matches:reduced}),localStorage:{getItem(){if(throws)throw Error('denied');return seen},setItem(k,v){if(throws)throw Error('denied');writes.push([k,v])}},
   setTimeout:(f,ms)=>{const id=++seq;timers.set(id,{f,ms});return id},clearTimeout:id=>timers.delete(id)});
  vm.runInContext(fs.readFileSync('intro.js','utf8'),ctx);
- return {nodes,get,doc,ctx,writes,timers,settle:()=>new Promise(resolve=>setImmediate(resolve)),fire(ms){const entry=[...timers].find(([,v])=>v.ms===ms);assert.ok(entry,'timer '+ms);timers.delete(entry[0]);entry[1].f()}};
+ return {nodes,get,doc,ctx,writes,timers,musicStarts,settle:()=>new Promise(resolve=>setImmediate(resolve)),fire(ms){const entry=[...timers].find(([,v])=>v.ms===ms);assert.ok(entry,'timer '+ms);timers.delete(entry[0]);entry[1].f()}};
 }
 test('daily intro uses Korean midnight; preview never writes or suppresses opening',async()=>{
  const h=harness({seen:'2026-11-11'});assert.equal(h.get('intro').hidden,true);
@@ -29,8 +29,8 @@ test('daily intro uses Korean midnight; preview never writes or suppresses openi
 });
 test('completion and replay restore focus/inert, and skip cancels pending preload',async()=>{
  const h=harness();assert.equal(h.ctx.window.confirmBellIntroActive,true);assert.equal(h.get('main').inert,true);
- await h.settle();h.fire(10100);assert.ok(h.get('intro').classes.has('leaving'));h.fire(1100);
- assert.equal(h.ctx.window.confirmBellIntroActive,false);assert.equal(h.get('main').inert,false);assert.equal(h.doc.activeElement,h.get('btn'));
+ assert.equal(h.musicStarts.length,0);await h.settle();assert.deepEqual(h.musicStarts,[true]);h.fire(10100);assert.ok(h.get('intro').classes.has('leaving'));h.fire(1100);
+ assert.deepEqual(h.musicStarts,[true]);assert.equal(h.ctx.window.confirmBellIntroActive,false);assert.equal(h.get('main').inert,false);assert.equal(h.doc.activeElement,h.get('btn'));
  h.doc.activeElement=h.get('introReplay');h.get('introReplay').events.click();h.get('introSkip').events.click();await h.settle();
  assert.equal(h.doc.activeElement,h.get('introReplay'));assert.equal(h.get('intro').hidden,true);assert.equal(h.timers.size,0);
 });

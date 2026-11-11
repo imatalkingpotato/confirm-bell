@@ -91,12 +91,13 @@ test('normal mode keeps the existing storage key and accumulated records',()=>{
 });
 test('music autoplay block, first interaction, manual pause and embed failure have honest UI states',()=>{
   const h=harness();let played=0,paused=0,config,current=12;const seeks=[];
-  const player={playVideo:()=>played++,pauseVideo:()=>paused++,setVolume:()=>{},getDuration:()=>3600,getCurrentTime:()=>current,seekTo:(s)=>{current=s;seeks.push(s)},getIframe:()=>({setAttribute:()=>{}})};
+  const player={unMute:()=>{},playVideo:()=>played++,pauseVideo:()=>paused++,setVolume:()=>{},getDuration:()=>3600,getCurrentTime:()=>current,seekTo:(s)=>{current=s;seeks.push(s)},getIframe:()=>({setAttribute:()=>{}})};
   h.context.location.origin='http://localhost:8769';
   h.context.YT={Player:function(id,c){config=c;return player}};
   vm.runInContext(fs.readFileSync('music.js','utf8'),h.context);h.context.window.onYouTubeIframeAPIReady();
-  config.events.onReady({target:player});assert.equal(played,1);
-  config.events.onAutoplayBlocked();assert.match(h.elements.get('musicStatus').textContent,/첫 타격/);
+  config.events.onReady({target:player});assert.equal(played,0);
+  h.context.window.confirmBellMusic.start(true);assert.equal(played,1);assert.equal(seeks[0],0);
+  config.events.onAutoplayBlocked();assert.match(h.elements.get('musicStatus').textContent,/터치/);
   h.doc.events.pointerdown({type:'pointerdown',target:{closest:()=>null}});assert.equal(played,2);
   config.events.onStateChange({data:1});assert.equal(h.elements.get('musicStatus').textContent,'');h.elements.get('musicToggle').click();assert.equal(paused,1);
   config.events.onStateChange({data:2});h.doc.events.pointerdown({type:'pointerdown',target:{closest:()=>null}});assert.equal(played,2);

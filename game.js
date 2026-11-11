@@ -610,13 +610,11 @@ function spawnFloat(txt,x,y){
   wrap.appendChild(d); setTimeout(()=>d.remove(),850);
 }
 let bubbleEl=null, bubbleT=null;
-function speak(txt,isMe){
+function speak(txt){
   if(bubbleEl) bubbleEl.remove();
   bubbleEl=document.createElement('div');
   bubbleEl.className='bubble';
   bubbleEl.textContent=txt;
-  if(isMe){ bubbleEl.style.right='5%'; bubbleEl.style.top='18%'; }
-  else { bubbleEl.style.left='5%'; bubbleEl.style.top='22%'; }
   wrap.appendChild(bubbleEl);
   clearTimeout(bubbleT);
   bubbleT=setTimeout(()=>{bubbleEl&&bubbleEl.remove(); bubbleEl=null;}, 2200);

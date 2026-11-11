@@ -139,7 +139,9 @@ h1 { font-size:38px; margin:10px 0 6px; }
 .row .bar { display:block; }
 .session-total { margin:16px 0 0; color:#8e80a4; font-size:10px; }
 .float-text { z-index:4; font-size:clamp(14px,3vw,24px); }
-.bubble { max-width:58%; white-space:normal; line-height:1.6; font-size:12px; box-shadow:3px 4px 0 #0006; }
+.bubble { left:50%; bottom:5%; transform:translateX(-50%); width:max-content; max-width:78%; white-space:normal; word-break:keep-all; overflow-wrap:anywhere; text-align:center; line-height:1.6; font-size:12px; box-shadow:3px 4px 0 #0006; animation:bubblePop .18s ease-out; }
+.bubble:after { top:-12px; bottom:auto; left:calc(50% - 6px); border-top-color:transparent; border-bottom-color:#222; }
+@keyframes bubblePop { from { opacity:0; transform:translateX(-50%) translateY(5px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
 .banner { max-width:88%; white-space:normal; line-height:1.6; font-size:17px; width:max-content; }
 .banner.milestone { top:45%; background:#200c27ee; border:3px solid #ffd94a; box-shadow:0 0 45px #ff702566; animation:banner 2.8s ease forwards; }
 .banner.milestone strong { display:block; font-size:32px; color:#ffd94a; }

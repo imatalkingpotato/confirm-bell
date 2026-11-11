@@ -31,10 +31,12 @@
   });
   function finish() {
     if (overlay.hidden) return;
+    const wasRunning=overlay.classList.contains('running');
     ++generation; clearTimeout(timer);
     overlay.hidden = true; overlay.classList.remove('running','leaving');
     document.documentElement.classList.remove('intro-open');
     window.confirmBellIntroActive = false;
+    if(!wasRunning)window.confirmBellMusic?.start();
     surfaces.forEach((el,i) => { el.inert = previousInert[i]; });
     seen = day();
     if (!preview) { try { localStorage.setItem(KEY,seen); } catch (_) {} }
@@ -53,11 +55,13 @@
     skip.focus({preventScroll:true});
     // A bounded preload prevents broken/missing images from trapping the visitor.
     const loaded = [...collage.children].map(img=>img.decode?.().catch(()=>{}) || Promise.resolve());
+    loaded.push(window.confirmBellMusic?.prepared || Promise.resolve());
     let loadTimer;
     Promise.race([Promise.all(loaded),new Promise(resolve=>{loadTimer=setTimeout(resolve,1200);})]).then(()=>{
       clearTimeout(loadTimer);
       if (run !== generation || overlay.hidden) return;
       overlay.classList.add('running');
+      window.confirmBellMusic?.start(true);
       timer = setTimeout(()=>{
         overlay.classList.add('leaving');
         timer = setTimeout(finish,reduced?200:1100);
@@ -72,4 +76,5 @@
     if (event.key === 'Tab') { event.preventDefault(); skip.focus(); }
   });
   if (query.get('intro') === '1' || seen !== day()) start();
+  else window.confirmBellMusic?.start();
 })();

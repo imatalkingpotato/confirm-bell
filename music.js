@@ -6,7 +6,18 @@
   const $ = id => document.getElementById(id);
   const toggle = $('musicToggle'), status = $('musicStatus'), seek = $('musicSeek');
   const card = $('musicCard'), wave = $('musicWave');
-  let player, ready = false, wanted = true, playing = false, failed = false, touched = false, dragging = false;
+  let player, ready = false, wanted = false, playing = false, failed = false, dragging = false, restartPending = false;
+  let prepared;
+  const preparation = new Promise(resolve=>{prepared=resolve;});
+  // Intro controls the start; prepare the player while its collage images load.
+  window.confirmBellMusic = {
+    prepared: preparation,
+    start(restart=false) {
+      if(failed)return;
+      wanted=true;restartPending=restart;
+      status.textContent='재생 시작 중…';requestPlay();
+    }
+  };
   const time = seconds => {
     const n = Math.max(0,Math.floor(Number(seconds)||0));
     return Math.floor(n/60)+':'+String(n%60).padStart(2,'0');
@@ -37,11 +48,15 @@
       seek.setAttribute('aria-valuetext',time(current)+' / '+time(duration));
     }
   }
-  function requestPlay() { if (ready && wanted && !failed) player.playVideo(); }
+  function requestPlay() {
+    if (!ready || !wanted || failed) return;
+    if(restartPending){player.seekTo(0,true);restartPending=false;}
+    player.unMute();player.playVideo();
+  }
   function firstInteraction(event) {
     if (event.type === 'keydown' && !['Space','Enter'].includes(event.code)) return;
     if (event.target.closest?.('.music-card')) return;
-    if (!touched) { touched = true; requestPlay(); }
+    if (!playing) requestPlay();
   }
   function jump(value) {
     if (!ready || failed) return;
@@ -64,7 +79,6 @@
   document.addEventListener('pointerdown', firstInteraction);
   document.addEventListener('keydown', firstInteraction);
   toggle.addEventListener('click', () => {
-    touched = true;
     if (failed) { status.textContent = '위 제목을 눌러 YouTube에서 재생해 주세요'; return; }
     if (playing) { wanted = false; player.pauseVideo(); }
     else { wanted = true; status.textContent = ready ? '재생 시작 중…' : '음악 연결 중…'; requestPlay(); }
@@ -72,15 +86,16 @@
   window.onYouTubeIframeAPIReady = () => {
     player = new YT.Player('youtubePlayer', {
       width: '236', height: '200', videoId: VIDEO_ID,
-      playerVars: { autoplay: 1, controls: 0, playsinline: 1, loop: 1, playlist: VIDEO_ID, origin: location.origin },
+      playerVars: { autoplay: 0, controls: 0, playsinline: 1, loop: 1, playlist: VIDEO_ID, origin: location.origin },
       events: {
         onReady(event) {
           ready = true;
           const frame=event.target.getIframe();
           frame.setAttribute('title','배경 음악 재생');frame.setAttribute('tabindex','-1');
+          frame.setAttribute('allow','autoplay; encrypted-media; fullscreen; picture-in-picture');
           event.target.setVolume(25);
-          status.textContent = wanted ? '재생 시작 중…' : '일시정지';
-          sync(); requestPlay();
+          status.textContent = wanted ? '재생 시작 중…' : '';
+          sync();prepared();requestPlay();
         },
         onStateChange(event) {
           playing = event.data === 1;
@@ -90,14 +105,14 @@
           else if (event.data === 0) { status.textContent = '다시 재생 중…'; if(wanted)requestPlay(); }
           render();sync();
         },
-        onAutoplayBlocked() { playing=false;status.textContent = '▶ 또는 첫 타격으로 음악 시작'; render(); },
-        onError() { failed = true; playing = false; seek.disabled=true; status.textContent = '임베드 재생 불가 · 제목을 눌러 YouTube에서 듣기'; render(); }
+        onAutoplayBlocked() { playing=false;status.textContent = '화면을 터치하면 음악이 시작돼요'; render(); },
+        onError() { failed = true; playing = false;prepared(); seek.disabled=true; status.textContent = '임베드 재생 불가 · 제목을 눌러 YouTube에서 듣기'; render(); }
       }
     });
   };
   setInterval(sync,300);
   const script = document.createElement('script');
   script.src = 'https://www.youtube.com/iframe_api';
-  script.onerror = () => { failed = true;playing=false;seek.disabled=true;status.textContent = '음악 연결 실패 · 제목을 눌러 YouTube에서 듣기';render(); };
+  script.onerror = () => { failed = true;playing=false;prepared();seek.disabled=true;status.textContent = '음악 연결 실패 · 제목을 눌러 YouTube에서 듣기';render(); };
   document.head.appendChild(script);
 })();

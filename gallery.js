@@ -5,7 +5,7 @@
   document.querySelector('main').hidden=true;
   document.getElementById('musicCard').hidden=true;
   const page=document.createElement('section');page.className='stage-gallery';
-  page.innerHTML='<header><span>CONFIRM BELL · CHARACTER PROGRESSION</span><h1>1,000타부터 10,000타까지</h1><p>10,000타에 병상 · 다음 한 대에 엔딩 후 새 판 시작</p><nav aria-label="미리 볼 캐릭터"></nav></header><div class="stage-grid"></div><p class="gallery-note">실제 게임 렌더링 · 미리보기는 기록에 반영되지 않습니다.</p><a href="./">← 컨펌벨로 돌아가기</a>';
+  page.innerHTML='<header><span>BBAK KWANG PUK BELL · CHARACTER PROGRESSION</span><h1>1,000타부터 10,000타까지</h1><p>10,000타에 병상 · 다음 한 대에 엔딩 후 새 판 시작</p><nav aria-label="미리 볼 캐릭터"></nav></header><div class="stage-grid"></div><p class="gallery-note">실제 게임 렌더링 · 미리보기는 기록에 반영되지 않습니다.</p><a href="./">← 빡쾅퍽벨로 돌아가기</a>';
   document.body.appendChild(page);
   const nav=page.querySelector('nav'),grid=page.querySelector('.stage-grid');
   function render(index){

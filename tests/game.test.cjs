@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
-function harness({preview=true,saved=null,reduced=false}={}){
+function harness({preview=true,saved=null,reduced=false,network=null,eventSource=undefined}={}){
   const elements=new Map(),timers=new Map(), frames=[], fetches=[], writes=[];let now=0,seq=0;
   const ctx=new Proxy({}, {get:(o,k)=>o[k]??(()=>{}),set:(o,k,v)=>(o[k]=v,true)});
   class El{
@@ -20,11 +20,11 @@ function harness({preview=true,saved=null,reduced=false}={}){
   doc.createElement=tag=>new El(tag);doc.createTextNode=text=>Object.assign(new El(),{textContent:text});
   doc.querySelector=q=>doc.getElementById(q==='main'?'main':q.replace('#',''));
   doc.querySelectorAll=q=>q==='.tab'?elements.get('tabs').children:[];
-  const context=vm.createContext({console,document:doc,location:{search:preview?'?preview=1':''},URLSearchParams,Date,Math,
+  const context=vm.createContext({console,document:doc,location:{search:preview?'?preview=1':''},URLSearchParams,Date,Math,EventSource:eventSource,
     performance:{now:()=>now},matchMedia:()=>({matches:reduced}),window:{},
     localStorage:{getItem:()=>saved&&JSON.stringify(saved),setItem:(k,v)=>writes.push([k,JSON.parse(v)])},
     setTimeout:(f,ms)=>{const id=++seq;timers.set(id,{f,ms});return id},clearTimeout:id=>timers.delete(id),setInterval:()=>0,
-    requestAnimationFrame:f=>frames.push(f),fetch:(...args)=>{fetches.push(args);return Promise.resolve({json:()=>Promise.resolve(null)})}
+    requestAnimationFrame:f=>frames.push(f),fetch:(...args)=>{fetches.push(args);return network?network(...args):Promise.resolve({ok:true,json:()=>Promise.resolve(null)})}
   });
   vm.runInContext(fs.readFileSync('game.js','utf8'),context);
   return {context,elements,timers,frames,fetches,writes,doc,advance:ms=>now+=ms,run:x=>vm.runInContext(x,context),hit:()=>{now+=60;elements.get('btn').click()}};
@@ -43,6 +43,90 @@ test('10,000 accepted hits preserve totals, trigger each milestone, and bound li
   assert.ok(h.run('debris.length')<=140);
   assert.ok(h.elements.get('stageWrap').querySelectorAll('.float-text').length<=8);
   assert.equal(h.fetches.length,0);assert.equal(h.writes.length,0);
+});
+test('streamed leaderboard changes render immediately; in-flight hits never disappear or count twice',async()=>{
+ const sources=[],gets=[];
+ class Stream{
+  constructor(url){this.url=url;this.events={};sources.push(this)}
+  addEventListener(name,fn){this.events[name]=fn}
+  close(){this.closed=true}
+  emit(type,path,data){this.events[type]({data:JSON.stringify({path,data})})}
+ }
+ const h=harness({preview:false,eventSource:Stream,network:(url,options)=>options?.method==='PATCH'?Promise.resolve({ok:true}):new Promise(resolve=>gets.push(resolve))});
+ assert.equal(sources.length,3);
+ sources.forEach(source=>source.emit('put','/',[100,20,0,0]));
+ assert.match(h.elements.get('boardMode').textContent,/실시간/);
+ h.hit();h.hit();assert.equal(h.run("sharedCounts('daily')[0]"),102);
+ await h.run('flushPending()');
+ const write=h.fetches.find(([,options])=>options?.method==='PATCH');
+ const payload=JSON.parse(write[1].body);
+ assert.equal(Object.keys(payload).length,3);
+ for(const value of Object.values(payload))assert.equal(value['.sv'].increment,2);
+ assert.equal(h.run("sharedCounts('daily')[0]"),102);
+ sources[0].emit('put','/0',102);assert.equal(h.run("sharedCounts('daily')[0]"),102);
+ sources[1].emit('patch','/',{'0':102,'1':35});
+ assert.match(h.elements.get('boardMonth').innerHTML,/35회/);
+ for(const resolve of gets)resolve({ok:true,json:async()=>[90,0,0,0]});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(h.run("sharedCounts('daily')[0]"),102);
+ sources[0].emit('patch','/',{'3':480});assert.match(h.elements.get('boardToday').innerHTML,/480회/);
+ h.doc.hidden=true;h.doc.events.visibilitychange();assert.ok(sources.every(s=>s.closed));
+ h.doc.hidden=false;h.doc.events.visibilitychange();assert.equal(sources.length,6);
+ sources[0].emit('put','/',[999,0,0,0]);assert.equal(h.run("sharedCounts('daily')[0]"),102);
+ sources[3].emit('put','/',[110,30,0,480]);assert.equal(h.run("sharedCounts('daily')[0]"),110);
+ sources[3].onerror();assert.match(h.elements.get('boardMode').textContent,/자동 갱신/);
+});
+test('day rollover flushes old-day hits to their original buckets and reconnects the new day',async()=>{
+ const sources=[];
+ class Stream{constructor(url){this.url=url;this.events={};sources.push(this)}addEventListener(n,fn){this.events[n]=fn}close(){this.closed=true}}
+ const h=harness({preview:false,eventSource:Stream});
+ const oldDay=h.run('K.day');h.hit();
+ h.run("nowKeys=()=>({day:'2099-01-01',mon:'2099-01',year:'2099'});checkRollover()");
+ await new Promise(resolve=>setImmediate(resolve));
+ const write=h.fetches.find(([,options])=>options?.method==='PATCH');
+ const payload=JSON.parse(write[1].body);
+ assert.ok(payload[`daily/${oldDay}/0`]);assert.equal(payload['daily/2099-01-01/0'],undefined);
+ assert.equal(h.run("sharedCounts('daily')[0]"),0);assert.ok(sources.slice(0,3).every(s=>s.closed));
+ assert.ok(sources[3].url.endsWith('/daily/2099-01-01.json'));
+});
+test('two open clients receive each other’s hits through stream events without polling or reload',async()=>{
+ const sources=[],values={};
+ class Stream{
+  constructor(url){this.url=url;this.events={};sources.push(this)}
+  addEventListener(name,fn){this.events[name]=fn}close(){this.closed=true}
+  put(path,data){if(!this.closed)this.events.put({data:JSON.stringify({path,data})})}
+ }
+ const network=async(url,options)=>{
+  if(options?.method==='PATCH'){
+   for(const [path,value] of Object.entries(JSON.parse(options.body))){
+    values[path]=(values[path]||0)+value['.sv'].increment;
+    const parent=path.slice(0,path.lastIndexOf('/')),index=path.slice(path.lastIndexOf('/')+1);
+    for(const source of sources)if(source.url.endsWith('/'+parent+'.json'))source.put('/'+index,values[path]);
+   }
+   return {ok:true};
+  }
+  return {ok:true,json:async()=>[0,0,0,0]};
+ };
+ const a=harness({preview:false,eventSource:Stream,network}),b=harness({preview:false,eventSource:Stream,network});
+ await new Promise(resolve=>setImmediate(resolve));sources.forEach(s=>s.put('/',[0,0,0,0]));
+ a.hit();await a.run('flushPending()');
+ assert.equal(b.run("sharedCounts('daily')[0]"),1);assert.equal(b.run('store.myTotal'),0);
+ b.hit();await b.run('flushPending()');
+ assert.equal(a.run("sharedCounts('daily')[0]"),2);assert.equal(a.run("sharedCounts('monthly')[0]"),2);
+ assert.match(a.elements.get('boardToday').innerHTML,/2회/);
+});
+test('failed reads retain the board and a rejected atomic write retries the original batch',async()=>{
+ let rejectWrites=true;
+ const h=harness({preview:false,network:async(url,options)=>({ok:options?.method==='PATCH'&&!rejectWrites,json:async()=>null})});
+ await new Promise(resolve=>setImmediate(resolve));
+ h.run('shared.daily=[10,0,0,0];shared.monthly=[10,0,0,0];shared.yearly=[10,0,0,0]');
+ await h.run('poll()');assert.equal(h.run('shared.daily[0]'),10);
+ h.hit();await h.run('flushPending()');assert.equal(h.run("sharedCounts('daily')[0]"),11);
+ const first=h.fetches.find(([,options])=>options?.method==='PATCH')[1].body;
+ rejectWrites=false;h.context.Date=class extends Date{static now(){return super.now()+4000}};
+ await h.run('flushPending()');
+ const writes=h.fetches.filter(([,options])=>options?.method==='PATCH');assert.equal(writes.length,2);
+ assert.equal(writes[1][1].body,first);
 });
 test('duplicate input is ignored, character switch resets combo and directs new counts correctly',()=>{
   const h=harness();h.hit();h.elements.get('btn').click();assert.equal(h.run('combo'),1);

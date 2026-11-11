@@ -14,7 +14,7 @@ const PEOPLE = [
   { avatar:'orange', lines:['이 덱을 떠나주세요','미팅이 백투백이라 오후에 컨펌하겠습니다','카피 주세요','썸네일 더 주세요 - 6:17PM','제가 지금 이동중이라ㅠ 여기로 주세요'], name:'이슬', hair:'#26180f', hairStyle:'long', top:'#7fb4d9' },
   { lines:['죄송합니다 락했습니다','늦어서 죄송해요 바로 볼게요'], name:'민희', hair:'#171310', hairStyle:'wave', top:'#e8a0b4' },
   { lines:['(0.001초 만에) 👀','지금 볼게요'], name:'우리', hair:'#171310', hairStyle:'bob',  top:'#a4d4a0' },
-  { avatar:'initial', lines:['덱으로 볼게요','1번이요~'], name:'지영', hair:'#171310', hairStyle:'tied', top:'#d9c47f' },
+  { avatar:'initial', lines:['덱으로 볼게요','1번이요~','힝 ㅠ.ㅠ 뎨동해요'], name:'지영', hair:'#171310', hairStyle:'tied', top:'#d9c47f' },
 ];
 const COMMON_LINES = ['보고 있습니다.','방금 보려고 했는데요.','TF 다녀올게요','에디터님들 의견 받아봐 주세요','이렇게 급한 건은 댓글 말고 슬랙으로 주세요','마음은 이미 컨펌했어요.','컨펌 완료. 망치 내려놓으세요.','이 망치도 컨펌받은 건가요?'];
 const STAGE_NAMES = ['컨펌 대기','눈가 멍','어깨 붕대','머리 붕대','볼 밴드','팔 깁스·슬링','목발 등장','다리 깁스','수액 연결','휠체어 출근','병상 컨펌'];
@@ -39,6 +39,10 @@ if(PREVIEW){
 let combo = 0, maxCombo = 0, comboTimer = null;
 let shared = { daily:null, monthly:null, yearly:null }; // 팀 모드 서버 값
 let pending = [0,0,0,0]; // 서버 전송 대기분
+let localFloor = {daily:[0,0,0,0],monthly:[0,0,0,0],yearly:[0,0,0,0]};
+function sharedCounts(kind){
+  return (shared[kind]||[0,0,0,0]).map((n,i)=>Math.max(n+pending[i],localFloor[kind][i]));
+}
 let anim = { hammer:0, bonk:0, frown:0, sweat:0, age:1, power:1, shake:0, freeze:0, shock:0, desk:0 };
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let motionOn = !reducedMotion, sfxOn = true;
@@ -66,41 +70,101 @@ function bucket(obj,key){ return obj[key] || (obj[key]=[0,0,0,0]); }
 function checkRollover(){
   const k = nowKeys();
   if(k.day !== K.day){
+    if(sharedOn)queuePending();
+    const old=K;
     K = k;
-    shared = { daily:null, monthly:null, yearly:null };
-    if(sharedOn) poll();
+    for(const [kind,key] of [['daily','day'],['monthly','mon'],['yearly','year']]){
+      if(old[key]!==K[key]){shared[kind]=null;localFloor[kind]=[0,0,0,0];}
+    }
+    if(sharedOn){connectShared();flushPending();}
     updateHud();
   }
 }
 setInterval(checkRollover, 20000);
 
-// ================= 팀 공유 동기화 (Firebase RTDB REST) =================
+// ================= 팀 공유 동기화 (Firebase RTDB REST + SSE) =================
 const sharedOn = !PREVIEW && !!SHARED_DB_URL;
-let poll = ()=>{};
+let poll=()=>{},connectShared=()=>{},queuePending=()=>{},flushPending=()=>{};
 if(sharedOn){
-  document.getElementById('boardMode').textContent='팀 전체 실시간 합산 · 00시/월초 자동 리셋';
-  setInterval(()=>{
-    pending.forEach((n,i)=>{
-      if(n>0){
-        const send=n; pending[i]=0;
-        [`daily/${K.day}`,`monthly/${K.mon}`,`yearly/${K.year}`].forEach((p,pi)=>{
-          fetch(`${SHARED_DB_URL}/${p}/${i}.json`,{
-            method:'PUT', body:JSON.stringify({'.sv':{'increment':send}})
-          }).catch(()=>{ if(pi===0) pending[i]+=send; });
-        });
-      }
-    });
-  }, 2500);
-  poll = ()=>{
-    checkRollover();
-    const get=p=>fetch(`${SHARED_DB_URL}/${p}.json`).then(r=>r.json()).catch(()=>null);
-    Promise.all([get('daily/'+K.day), get('monthly/'+K.mon), get('yearly/'+K.year)]).then(([d,m,y])=>{
-      const norm=v=>[0,1,2,3].map(i=>(v&&v[i])||0);
-      shared = { daily:norm(d), monthly:norm(m), yearly:norm(y) };
-      updateHud();
-    });
+  const kinds=['daily','monthly','yearly'],keys={daily:'day',monthly:'mon',yearly:'year'};
+  const batches=[],streams=[];
+  let generation=0,sending=false,retryAt=0,polling=false;
+  let live={},revision={};
+  const number=v=>Number.isFinite(Number(v))?Math.max(0,Number(v)):0;
+  const norm=v=>[0,1,2,3].map(i=>number(v?.[i]));
+  const mode=()=>{document.getElementById('boardMode').textContent=kinds.every(k=>live[k])?'팀 전체 실시간 합산 · 00시/월초 자동 리셋':'연결 확인 중 · 기록 자동 갱신';};
+  queuePending=()=>{
+    if(!pending.some(Boolean))return;
+    batches.push({counts:pending.slice(),keys:{...K}});pending.fill(0);
   };
-  poll(); setInterval(poll, 6000);
+  flushPending=async()=>{
+    queuePending();
+    if(sending||!batches.length||Date.now()<retryAt)return;
+    sending=true;const batch=batches.shift(),updates={};
+    batch.counts.forEach((n,i)=>{if(n)for(const kind of kinds)updates[`${kind}/${batch.keys[keys[kind]]}/${i}`]={'.sv':{increment:n}};});
+    try{
+      // A single atomic update keeps day/month/year totals together.
+      const response=await fetch(`${SHARED_DB_URL}.json`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(updates),keepalive:true});
+      if(!response.ok)throw Error('write failed');
+      retryAt=0;
+      if(!kinds.every(k=>live[k]))poll();
+    }catch(_){batches.unshift(batch);retryAt=Date.now()+3000;}
+    finally{sending=false;}
+  };
+  poll=async()=>{
+    if(polling)return;
+    polling=true;const run=generation,dates={...K};
+    try{
+      await Promise.all(kinds.map(async kind=>{
+        const version=revision[kind]||0;
+        try{
+          const response=await fetch(`${SHARED_DB_URL}/${kind}/${dates[keys[kind]]}.json`,{cache:'no-store'});
+          if(!response.ok)return;
+          const data=await response.json();
+          // A delayed GET must not overwrite a newer streamed value.
+          if(run!==generation||version!==(revision[kind]||0))return;
+          shared[kind]=norm(data);updateHud();
+        }catch(_){} // Retain last known totals during a connection failure.
+      }));
+    }finally{polling=false;}
+  };
+  const close=()=>{generation++;streams.splice(0).forEach(source=>source.close());live={};revision={};};
+  connectShared=()=>{
+    close();const run=generation;mode();
+    if(typeof EventSource!=='undefined'&&!document.hidden){
+      for(const kind of kinds){
+        const source=new EventSource(`${SHARED_DB_URL}/${kind}/${K[keys[kind]]}.json`);
+        streams.push(source);
+        const receive=type=>event=>{
+          if(run!==generation)return;
+          try{
+            const message=JSON.parse(event.data),path=String(message.path||'/'),data=message.data;
+            let next=(shared[kind]||[0,0,0,0]).slice();
+            if(type==='put'&&path==='/')next=norm(data);
+            else if(type==='patch'&&path==='/'){
+              for(const [i,value] of Object.entries(data||{}))if(/^[0-3]$/.test(i))next[Number(i)]=number(value);
+            }else if(/^\/[0-3]$/.test(path))next[Number(path.slice(1))]=number(data);
+            else return;
+            shared[kind]=next;revision[kind]=(revision[kind]||0)+1;live[kind]=true;mode();updateHud();
+          }catch(_){}
+        };
+        source.addEventListener('put',receive('put'));source.addEventListener('patch',receive('patch'));
+        source.onerror=()=>{if(run===generation){live[kind]=false;mode();}};
+        for(const event of ['cancel','auth_revoked'])source.addEventListener(event,()=>{source.close();if(run===generation){live[kind]=false;mode();}});
+      }
+    }
+    poll();
+  };
+  connectShared();
+  setInterval(flushPending,500);
+  setInterval(()=>{if(!document.hidden&&!kinds.every(k=>live[k]))poll();},4000);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden){flushPending();close();}
+    else{checkRollover();connectShared();flushPending();}
+  });
+  window.addEventListener?.('online',()=>{connectShared();flushPending();});
+  window.addEventListener?.('pagehide',()=>{flushPending();close();});
+  window.addEventListener?.('pageshow',event=>{if(event.persisted)connectShared();});
 }
 
 // ================= 캔버스 =================
@@ -582,7 +646,11 @@ function hit(){
   const now=performance.now(); if(now-hitGate<45) return; hitGate=now;
   const p=PEOPLE[cur]; checkRollover();
   bucket(store.daily,K.day)[cur]++; bucket(store.monthly,K.mon)[cur]++; bucket(store.yearly,K.year)[cur]++;
-  store.myTotal++; lifetimeHits[cur]++; roundHits[cur]++; if(sharedOn) pending[cur]++;
+  store.myTotal++; lifetimeHits[cur]++; roundHits[cur]++;
+  if(sharedOn){
+    for(const kind of ['daily','monthly','yearly'])localFloor[kind][cur]=sharedCounts(kind)[cur]+1;
+    pending[cur]++;
+  }
   if(roundHits[cur]>10000){ roundHits[cur]=10000; save(); beginEnding(); return; }
   combo++; maxCombo=Math.max(maxCombo,combo);
   const heavy=combo%50===0, critical=combo%10===0;
@@ -638,10 +706,9 @@ function updateHud(){
   $('btn').classList.toggle('fury',rage>=80);
 
   $('targetLabel').textContent=PEOPLE[cur].name+'님 · 이번 판 '+roundHits[cur].toLocaleString()+' / 10,000타';
-  const add=(a,b)=>a.map((v,i)=>v+b[i]);
-  const cD = sharedOn ? add(shared.daily  ||[0,0,0,0], pending) : bucket(store.daily,K.day).slice();
-  const cM = sharedOn ? add(shared.monthly||[0,0,0,0], pending) : bucket(store.monthly,K.mon).slice();
-  const cY = sharedOn ? add(shared.yearly ||[0,0,0,0], pending) : bucket(store.yearly,K.year).slice();
+  const cD = sharedOn ? sharedCounts('daily') : bucket(store.daily,K.day).slice();
+  const cM = sharedOn ? sharedCounts('monthly') : bucket(store.monthly,K.mon).slice();
+  const cY = sharedOn ? sharedCounts('yearly') : bucket(store.yearly,K.year).slice();
   $('sessionTotal').textContent=`나의 누적 ${store.myTotal.toLocaleString()}타 · 오늘 팀 합계 ${cD.reduce((a,b)=>a+b,0).toLocaleString()}타`;
   $('boardToday').innerHTML=boardHtml(cD);
   $('boardMonth').innerHTML=boardHtml(cM);

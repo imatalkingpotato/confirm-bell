@@ -51,6 +51,20 @@ test('duplicate input is ignored, character switch resets combo and directs new 
   assert.equal(h.run('bubbleEl.textContent'),'덱으로 볼게요');
   const timeout=[...h.timers.values()].find(t=>t.ms===1800);timeout.f();assert.equal(h.run('combo'),0);
 });
+test('hammer keeps a rigid handle and triggers impact only at contact, including rapid input and character switches',()=>{
+  const h=harness();
+  for(let age=0;age<=.52;age+=.01){
+    const p=h.run(`hammerPose(${age})`);
+    assert.ok(Math.abs(Math.hypot(p.x-p.grip.x,p.y-p.grip.y,p.z-p.grip.z)-51)<1e-9);
+  }
+  h.hit();h.run('loop(40);loop(80)');
+  assert.equal(h.run('anim.shock'),0);assert.equal(h.run('debris.length'),0);
+  h.run('loop(125)');assert.ok(h.run('anim.shock')>0);assert.equal(h.run('anim.pendingImpact'),false);
+  const particles=h.run('debris.length');h.run('loop(145);loop(165)');assert.equal(h.run('debris.length'),particles);
+  h.run('anim.shock=0;debris=[]');h.hit();h.hit();h.run('loop(200)');assert.ok(h.run('anim.shock')>0);
+  h.hit();h.elements.get('tabs').children[1].click();h.run('loop(240);loop(280);loop(320)');
+  assert.equal(h.run('anim.shock'),0);assert.equal(h.run('debris.length'),0);
+});
 test('all requested personal lines can be reached and never leak to a different character',()=>{
   const h=harness();
   for(let index=0;index<4;index++){

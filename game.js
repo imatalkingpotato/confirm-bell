@@ -207,22 +207,38 @@ function drawHospitalBed(p){
   [[8,21],[11,21],[13,18],[15,23],[17,17],[19,21],[22,21]].forEach(([x,y],i)=>i?ctx.lineTo(x*S,y*S):ctx.moveTo(x*S,y*S));ctx.stroke();
 }
 function impactPoint(){return injuryLevel(cur)>=10?{x:34,y:44}:{x:71,y:32};}
+const HAMMER_CONTACT=.12, HAMMER_END=.52, HAMMER_LENGTH=51;
 function hammerPose(age){
-  const ease=t=>t*t*(3-2*t);
-  if(age<.10){const t=ease(Math.max(0,age)/.10);return {x:118-47*t,y:16+16*t,z:95-95*t,yaw:-1.1+1.3*t,roll:-.4+.25*t,front:false};}
-  if(age<.28){const t=ease((age-.10)/.18);return {x:71-46*t,y:32+16*t,z:-58*t,yaw:.2+1.3*t,roll:-.15+.65*t,front:true};}
-  const t=ease(Math.min(1,(age-.28)/.16));return {x:25-52*t,y:48+11*t,z:-58+35*t,yaw:1.5+.6*t,roll:.5+.5*t,front:true};
+  const ease=t=>t*t*(3-2*t),clamp=t=>Math.max(0,Math.min(1,t));
+  let angle,tilt;
+  if(age<HAMMER_CONTACT){
+    // Accelerate toward contact; the grip-to-head distance stays fixed in 3D.
+    const t=clamp(age/HAMMER_CONTACT),s=t*t;
+    angle=-1.02-1.21*s;tilt=.30*(1-s);
+  }else if(age<.17){
+    const t=ease((age-HAMMER_CONTACT)/.05);
+    angle=-2.23-.07*t;tilt=-.025*t;
+  }else{
+    const t=ease(clamp((age-.17)/.35));
+    angle=-2.30+1.25*t;tilt=-.025+.18*t;
+  }
+  const leave=ease(clamp((age-.34)/.18));
+  const grip={x:112+42*leave,y:64-22*leave,z:0};
+  return {x:grip.x+HAMMER_LENGTH*Math.cos(angle)*Math.cos(tilt),
+    y:grip.y+HAMMER_LENGTH*Math.sin(angle)*Math.cos(tilt),
+    z:grip.z+HAMMER_LENGTH*Math.sin(tilt),grip,yaw:.18+tilt*.5,
+    opacity:Math.min(1,clamp(age/.025))*(1-leave),front:age>=.10};
 }
 function projectHammer(x,y,z){const scale=170/(170+z);return {x:(64+(x-64)*scale)*S,y:(44+(y-44)*scale)*S,scale};}
 function drawHammer(front){
-  if(anim.age>=.44)return;
+  if(anim.age>=HAMMER_END)return;
   const pose=hammerPose(anim.age),contact=impactPoint();
   if(pose.front!==front)return;
   const dx=contact.x-71,dy=contact.y-32;
   function head(p,alpha=1){
-    ctx.save();ctx.globalAlpha=alpha;
-    const size=anim.power>=3?1.25:1;
-    const roll=Math.atan2(8-p.y,112-p.x)-Math.PI/2;
+    ctx.save();ctx.globalAlpha=alpha*p.opacity;
+    const size=1;
+    const roll=Math.atan2(p.grip.y-p.y,p.grip.x-p.x)-Math.PI/2;
     const verts=[],faces=[];
     function vertex(x,y,z){
       const rx=x*Math.cos(p.yaw)+z*Math.sin(p.yaw),rz=-x*Math.sin(p.yaw)+z*Math.cos(p.yaw);
@@ -247,9 +263,9 @@ function drawHammer(front){
     ctx.restore();
   }
   const center=projectHammer(pose.x+dx,pose.y+dy,pose.z);
-  const hand=projectHammer(112+dx,8+dy,35);
-  if(motionOn&&anim.age>.025){for(let i=3;i>=1;i--)head(hammerPose(Math.max(0,anim.age-i*.025)),.05*(4-i));}
-  ctx.save();
+  const hand=projectHammer(pose.grip.x+dx,pose.grip.y+dy,pose.grip.z);
+  if(motionOn&&anim.age>.035&&anim.age<HAMMER_CONTACT){for(let i=2;i>=1;i--)head(hammerPose(Math.max(0,anim.age-i*.018)),.07*(3-i));}
+  ctx.save();ctx.globalAlpha=pose.opacity;
   ctx.strokeStyle='#62402c';ctx.lineWidth=5*S*Math.max(.65,center.scale);ctx.beginPath();ctx.moveTo(hand.x,hand.y);ctx.lineTo(center.x,center.y);ctx.stroke();
   ctx.strokeStyle='#e2b276';ctx.lineWidth=2*S;ctx.beginPath();ctx.moveTo(hand.x-2,hand.y-2);ctx.lineTo(center.x-2,center.y-2);ctx.stroke();
   ctx.fillStyle='#edc4a3';ctx.fillRect(hand.x-4*S,hand.y-4*S,8*S,8*S);ctx.restore();
@@ -401,7 +417,11 @@ function loop(t){
   const dt=Math.min(Math.max((t-last)/1000,0),.05); last=t;
   if(anim.freeze>0){ anim.freeze-=dt; }
   else {
+    const before=anim.age;
     anim.age+=dt;
+    if(anim.pendingImpact && before<HAMMER_CONTACT && anim.age>=HAMMER_CONTACT){
+      anim.age=HAMMER_CONTACT;anim.pendingImpact=false;impact(anim.power);
+    }
     anim.bonk=Math.max(0,anim.bonk-dt*3.8);
     anim.hammer=Math.max(0,anim.hammer-dt*7);
     anim.frown=Math.max(0,anim.frown-dt);
@@ -528,7 +548,7 @@ function finishEnding(){
 }
 function beginEnding(){
   if(endingActive)return;
-  endingActive=true;clearTimeout(comboTimer);clearTimeout(bubbleT);
+  endingActive=true;anim.pendingImpact=false;clearTimeout(comboTimer);clearTimeout(bubbleT);
   if(bubbleEl){bubbleEl.remove();bubbleEl=null;}
   const panel=$('ending');
   endingInert=[document.querySelector('main'),$('musicCard')].map(el=>{const value=el.inert;el.inert=true;return value;});
@@ -541,6 +561,11 @@ function impact(power){
   anim.bonk=1; anim.frown=.6; anim.shock=1; anim.desk=1;
   anim.shake=motionOn ? 1 : 0; anim.freeze=motionOn ? (power>=3?.045:.018) : 0;
   bonkSound(power);
+  if(!GALLERY&&power>=2){
+    const badge=document.getElementById('impactBadge');badge.textContent=power>=3?'풀스윙!':'CRITICAL!';
+    badge.classList.remove('active');void badge.offsetWidth;badge.classList.add('active');
+  }
+  if(!GALLERY)spawnFloat(power>=3?'콰아앙!!':power>=2?'쾅!!':['퍽!','쾅!','빡!'][combo%3],340+Math.random()*55,120+Math.random()*20);
   if(motionOn){
     const contact=impactPoint();
     for(let i=0;i<(power>=3?66:32);i++){
@@ -562,17 +587,14 @@ function hit(){
   combo++; maxCombo=Math.max(maxCombo,combo);
   const heavy=combo%50===0, critical=combo%10===0;
   const power=heavy?3.5:critical?2:1;
-  anim.age=0;anim.power=power;anim.hammer=1;
+  // Rapid input shortens the remaining wind-up instead of postponing contact forever.
+  anim.age=anim.pendingImpact?HAMMER_CONTACT-.025:0;
+  anim.pendingImpact=true;anim.power=power;anim.hammer=1;anim.freeze=0;
   if(combo%7===0) anim.sweat=1;
-  // One impact per accepted press; no delayed callbacks can leak into another character.
-  impact(power);save();
+  // Contact is driven by the animation clock, never a delayed timer.
+  save();
   clearTimeout(comboTimer);
   comboTimer=setTimeout(()=>{combo=0;updateHud();},1800);
-  spawnFloat(heavy?'콰아앙!!':critical?'쾅!!':['퍽!','쾅!','빡!'][combo%3],340+Math.random()*55,120+Math.random()*20);
-  if(critical){
-    const badge=document.getElementById('impactBadge'); badge.textContent=heavy?'풀스윙!':'CRITICAL!';
-    badge.classList.remove('active'); void badge.offsetWidth; badge.classList.add('active');
-  }
   // Personal lines cycle so every supplied line can actually be encountered.
   if(combo===1 || combo%5===0){
     const personal=speechTurn[cur]++ % 2 === 0;
@@ -652,7 +674,7 @@ PEOPLE.forEach((p,i)=>{
   const b=document.createElement('button'); b.className='tab'+(i===0?' on':'');
   b.appendChild(avatarCanvas(p));
   b.appendChild(document.createTextNode(p.name+'님'));
-  b.onclick=()=>{ if(endingActive)return;clearTimeout(comboTimer);cur=i;combo=0;anim.age=1;anim.bonk=0;anim.frown=0;anim.shock=0;anim.shake=0;anim.desk=0;anim.freeze=0;debris=[]; document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('on',j===i)); updateHud(); speak('…네? 저요?'); };
+  b.onclick=()=>{ if(endingActive)return;clearTimeout(comboTimer);cur=i;combo=0;anim.pendingImpact=false;anim.age=1;anim.bonk=0;anim.frown=0;anim.shock=0;anim.shake=0;anim.desk=0;anim.freeze=0;debris=[]; document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('on',j===i)); updateHud(); speak('…네? 저요?'); };
   tabs.appendChild(b);
 });
 
